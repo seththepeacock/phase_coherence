@@ -181,21 +181,21 @@ def get_coherence(wf, sr, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=No
         d["coherence"] = coherence
         d["phases"] = phases
         d["phase_diffs"] = phase_diffs
-        d["|<phase_diffs>|"] = avg_abs_phase_diffs
+        d["<|phase_diffs|>"] = avg_abs_phase_diffs
         d["avg_vector_angle"] = avg_vector_angle
         d["N_segs"] = N_segs
         d["stft"] = stft
   """
+
   
-  # make sure we either have both stft and freq_ax or neither
-  if (stft is None and freq_ax is not None) or (stft is not None and freq_ax is None):
-    raise Exception("We need both stft and freq_ax (or neither)!")
-  
-  # if you passed the stft and freq_ax in then we'll skip over this
-  if stft is None:
+  # if nothing was passed into reuse_stft then we need to recalculate it
+  if reuse_stft is None:
     freq_ax, stft = get_stft(wf=wf, sr=sr, tau=tau, xi=xi, N_segs=N_segs, win_type=win_type, filter_seg=filter_seg)
   else:
     freq_ax, stft = reuse_stft
+    # Make sure these are valid
+    if stft.shape[1] != freq_ax.shape[0]:
+      raise Exception("STFT and frequency axis don't match!")
   
   # calculate necessary params from the stft
   N_segs, N_bins = np.shape(stft)
@@ -238,7 +238,8 @@ def get_coherence(wf, sr, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=No
     
     # Since this references each frequency bin to its adjacent neighbor, we'll plot them w.r.t. the average frequency 
         # this corresponds to shifting everything over half a bin width (bin width is 1/tau)
-    freq_ax = freq_ax + (1/2)*(1/tau)
+    bin_width = 1/tau
+    freq_ax = freq_ax + (bin_width / 2)
     
   
   # or we can reference it against the phase of both the lower and higher frequencies in the same window
@@ -285,8 +286,8 @@ def get_coherence(wf, sr, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=No
     d["coherence"] = coherence
     d["phases"] = phases
     d["phase_diffs"] = phase_diffs
-    d["|<phase_diffs>|"] = avg_abs_phase_diffs
-    d["avg_phase_diff_vector_angle"] = avg_vector_angle
+    d["<|phase_diffs|>"] = avg_abs_phase_diffs
+    d["avg_vector_angle"] = avg_vector_angle
     d["N_segs"] = N_segs
     d["freq_ax"] = freq_ax
     d["stft"] = stft
@@ -319,15 +320,14 @@ def get_welch(wf, sr, tau, xi=None, N_segs=None, win_type='boxcar', scaling='den
         d["spectrum"] = spectrum
         d["segmented_spectrum"] = segmented_spectrum
   """
-  # make sure we either have both or neither
-  if (stft is None and freq_ax is not None) or (stft is not None and freq_ax is None):
-    raise Exception("We need both stft and freq_ax (or neither)!")
-  
-  # if you passed the stft and freq_ax in then we'll skip over this
+  # if nothing was passed into reuse_stft then we need to recalculate it
   if reuse_stft is None:
     freq_ax, stft = get_stft(wf=wf, sr=sr, tau=tau, xi=xi, N_segs=N_segs, win_type=win_type)
   else:
     freq_ax, stft = reuse_stft
+    # Make sure these are valid
+    if stft.shape[1] != freq_ax.shape[0]:
+      raise Exception("STFT and frequency axis don't match!")
 
   # calculate necessary params from the stft
   N_segs, N_bins = np.shape(stft)
