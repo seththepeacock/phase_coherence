@@ -1,11 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from  matplotlib.axes import Axes
-from vodscillator import *
 from scipy.fft import rfft, rfftfreq, fftshift
 from scipy.signal.windows import get_window
 from scipy.signal import butter, sosfilt
-   
+from .funcs import *
 
 
 def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scaling='density', ref_type="next_win", win_type='boxcar', fftshift_segs=False, khz=False, db=True, downsample_freq=False, 
@@ -67,7 +66,7 @@ def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scal
   freq_ax = d["freq_ax"]
   
   # get (averaged over segments) spectrum
-  p = get_spectrum(wf=wf, sr=sr, tau=tau, stft=stft, scaling=scaling, win_type=win_type, fftshift_segs=fftshift_segs, freq_ax=freq_ax, return_dict=True)
+  p = get_welch(wf=wf, sr=sr, tau=tau, stft=stft, scaling=scaling, win_type=win_type, fftshift_segs=fftshift_segs, freq_ax=freq_ax, return_dict=True)
   spectrum = p["spectrum"]
   spectrum_freq_ax = p["freq_ax"]
 
@@ -210,7 +209,7 @@ def spectrogram(wf, sr, tau, xi=None, num_segs=None, db=True, fftshift_segs=Fals
   # to convert these to time, just divide by sample rate 
   t_ax = seg_start_indices / sr
   # calculate the spectrum of each window
-  win_spectrum = get_spectrum(wf, sr=sr, tau=tau, stft=stft, freq_ax=freq_ax, fftshift_segs=fftshift_segs, scaling=scaling, return_dict=True)["win_spectrum"]
+  win_spectrum = get_welch(wf, sr=sr, tau=tau, stft=stft, freq_ax=freq_ax, fftshift_segs=fftshift_segs, scaling=scaling, return_dict=True)["win_spectrum"]
   # make meshgrid
   xx, yy = np.meshgrid(t_ax, freq_ax)
   if khz:

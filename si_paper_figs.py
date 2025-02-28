@@ -1,8 +1,7 @@
-from vodscillator import *
 import matplotlib.pyplot as plt
 import numpy as np
-from funcs_plotting import *
-from funcs_spectral import *
+from pcoherence import *
+import pcoherence as pc
 import scipy.io
 
 # plt.rcParams.update({
