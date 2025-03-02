@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from pcoherence import *
-import pcoherence as pc
+from phaseco import *
+import phaseco as pc
 import scipy.io
 
 # plt.rcParams.update({

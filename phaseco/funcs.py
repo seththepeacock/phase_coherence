@@ -1,6 +1,68 @@
 import numpy as np
 from scipy.signal import get_window
 from scipy.fft import rfft, rfftfreq, fftshift
+import pywt
+
+
+def get_cwt(wf, fs, fb, f):
+  """ Returns the CWT coefficients of the given waveform with a complex morelet wavelet
+  Parameters
+  ------------
+      wf: array
+          waveform input array
+      fs: int
+          sampling rate of waveform
+      fb: float
+          bandwidth of wavelet in time; bigger bandwidth = better frequency resolution but less time resolution (similar to tau)
+      f: array
+          frequency axis
+  """
+  # Perform a Continuous Wavelet Transform (CWT)
+  dt = 1/fs
+  # Define wavelet and get its center frequency (for scale-frequency conversion)
+  wavelet_string = f'cmor{fb}-1.0'
+  wavelet = pywt.ContinuousWavelet(wavelet_string)
+  fc = pywt.central_frequency(wavelet) # This will always be 1.0 because we set it that way
+  # Convert frequencies to scales
+  scales = fc / (f * dt)
+  coefficients, f_cwt = pywt.cwt(wf, scales, wavelet, method='fft', sampling_period=dt)
+  return coefficients.T
+
+def get_wavelet_coherence(wf, fs, f, fb=1.0, cwt=None, xi=0.0025):
+  """ Returns the wavelet coherence of the given waveform with a complex morelet wavelet
+  Parameters
+  ------------
+      wf: array
+          waveform input array
+      fs: int
+          sampling rate of waveform
+      f: array
+          frequency axis
+      fb: float, Optional
+          bandwidth of wavelet in time; bigger bandwidth = better frequency resolution but less time resolution (similar to tau)
+      cwt: array, Optional
+          CWT coefficients of waveform if already calculated
+      xi: float, Optional
+          length (in time) between the start of successive segments
+  """
+  if cwt is None:
+    cwt = get_cwt(wf=wf, fs=fs, fb=fb, f=f)
+  # get phases
+  phases=np.angle(cwt)
+  xiS = int(xi*fs)
+
+  N_segs = int(len(wf)/xiS) - 1
+
+  # initialize array for phase diffs
+  phase_diffs = np.zeros((N_segs, len(f)))
+
+  # calc phase diffs
+  for seg in range(N_segs):
+      phase_diffs[seg, :] = phases[int(seg*xiS)] - phases[int((seg+1)*xiS)]
+
+  wav_coherence, _ = get_avg_vector(phase_diffs)
+  
+  return wav_coherence
 
 
 def get_avg_vector(phases):
@@ -18,14 +80,14 @@ def get_avg_vector(phases):
   # finally, output the averaged vector's vector strength and angle with x axis (each a 1D array along the frequency axis) 
   return np.sqrt(xx**2 + yy**2), np.arctan2(yy, xx)
 
-def spectral_filter(wf, sr, cutoff_freq, type='hp'):
+def spectral_filter(wf, fs, cutoff_freq, type='hp'):
   """ Filters waveform by zeroing out frequencies above/below cutoff frequency
   
   Parameters
   ------------
       wf: array
         waveform input array
-      sr: int
+      fs: int
         sample rate of waveform
       cutoff_freq: float
         cutoff frequency for filtering
@@ -33,7 +95,7 @@ def spectral_filter(wf, sr, cutoff_freq, type='hp'):
         Either 'hp' for high-pass or 'lp' for low-pass
   """
   fft_coefficients = np.fft.rfft(wf)
-  frequencies = np.fft.rfftfreq(len(wf), d=1/sr)
+  frequencies = np.fft.rfftfreq(len(wf), d=1/fs)
 
   if type == 'hp':
     # Zero out coefficients from 0 Hz to cutoff_frequency Hz
@@ -47,14 +109,14 @@ def spectral_filter(wf, sr, cutoff_freq, type='hp'):
   
   return filtered_wf
 
-def get_stft(wf, sr, tau, xi=None, N_segs=None, win_type='boxcar', filter_seg='none', fftshift_segs=False, return_dict=False):
+def get_stft(wf, fs, tau, xi=None, N_segs=None, win_type='boxcar', filter_seg='none', fftshift_segs=False, return_dict=False):
   """ Returns a dict with the segmented fft and associated freq ax of the given waveform
 
   Parameters
   ------------
       wf: array
         waveform input array
-      sr: int
+      fs: int
         sample rate of waveform
       tau: float
         length (in time) of each window
@@ -81,13 +143,13 @@ def get_stft(wf, sr, tau, xi=None, N_segs=None, win_type='boxcar', filter_seg='n
     xi=tau
   
   # calculate the number of samples in the window
-  nperseg = int(tau*sr)
+  nperseg = int(tau*fs)
 
   # and the number of samples to shift
-  n_shift = int(xi*sr)
+  n_shift = int(xi*fs)
 
   # get sample_spacing
-  delta_t = 1/sr
+  delta_t = 1/fs
 
   # Girst, get the last index of the waveform
   final_wf_index = len(wf) - 1
@@ -121,7 +183,7 @@ def get_stft(wf, sr, tau, xi=None, N_segs=None, win_type='boxcar', filter_seg='n
     if fftshift_segs: # optionally swap the halves of the waveform to effectively center it in time
       seg = fftshift(seg)
     if filter_seg:      
-      seg = spectral_filter(seg, sr, cutoff_freq=100)
+      seg = spectral_filter(seg, fs, cutoff_freq=100)
 
     segmented_wf[k, :] = seg
 
@@ -150,14 +212,14 @@ def get_stft(wf, sr, tau, xi=None, N_segs=None, win_type='boxcar', filter_seg='n
   else: 
     return freq_ax, stft
   
-def get_coherence(wf, sr, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=None, ref_type="next_seg", filter_seg=False, bin_shift=1, return_dict=False):
+def get_coherence(wf, fs, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=None, ref_type="next_seg", filter_seg=False, bin_shift=1, return_dict=False):
   """ Gets the phase coherence of the given waveform with the given window size
 
   Parameters
   ------------
       wf: array
         waveform input array
-      sr:
+      fs:
         sample rate of waveform
       tau: float
         length (in time) of each segment
@@ -190,7 +252,7 @@ def get_coherence(wf, sr, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=No
   
   # if nothing was passed into reuse_stft then we need to recalculate it
   if reuse_stft is None:
-    freq_ax, stft = get_stft(wf=wf, sr=sr, tau=tau, xi=xi, N_segs=N_segs, win_type=win_type, filter_seg=filter_seg)
+    freq_ax, stft = get_stft(wf=wf, fs=fs, tau=tau, xi=xi, N_segs=N_segs, win_type=win_type, filter_seg=filter_seg)
   else:
     freq_ax, stft = reuse_stft
     # Make sure these are valid
@@ -294,14 +356,14 @@ def get_coherence(wf, sr, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=No
     return d
 
 
-def get_welch(wf, sr, tau, xi=None, N_segs=None, win_type='boxcar', scaling='density', reuse_stft=None, return_dict=False):
+def get_welch(wf, fs, tau, xi=None, N_segs=None, win_type='boxcar', scaling='density', reuse_stft=None, return_dict=False):
   """ Gets the Welch averaged power of the given waveform with the given window size
 
   Parameters
   ------------
       wf: array
         waveform input array
-      sr: int
+      fs: int
         sample rate of waveform
       tau: float
         length (in time) of each window; used in get_stft and to calculate normalizing factor
@@ -322,7 +384,7 @@ def get_welch(wf, sr, tau, xi=None, N_segs=None, win_type='boxcar', scaling='den
   """
   # if nothing was passed into reuse_stft then we need to recalculate it
   if reuse_stft is None:
-    freq_ax, stft = get_stft(wf=wf, sr=sr, tau=tau, xi=xi, N_segs=N_segs, win_type=win_type)
+    freq_ax, stft = get_stft(wf=wf, fs=fs, tau=tau, xi=xi, N_segs=N_segs, win_type=win_type)
   else:
     freq_ax, stft = reuse_stft
     # Make sure these are valid
@@ -333,7 +395,7 @@ def get_welch(wf, sr, tau, xi=None, N_segs=None, win_type='boxcar', scaling='den
   N_segs, N_bins = np.shape(stft)
 
   # calculate the number of samples in the window for normalizing factor purposes
-  nperseg = int(tau*sr)
+  nperseg = int(tau*fs)
   
   # initialize array
   segmented_spectrum = np.zeros((N_segs, N_bins))

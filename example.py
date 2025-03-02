@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Import funcs file
-from funcs import *
+from phaseco import *
 
 # Generate random noise
 t_max = 10

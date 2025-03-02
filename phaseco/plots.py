@@ -1,16 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from  matplotlib.axes import Axes
-from scipy.fft import rfft, rfftfreq, fftshift
-from scipy.signal.windows import get_window
-from scipy.signal import butter, sosfilt
 from .funcs import *
 
 
 def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scaling='density', ref_type="next_win", win_type='boxcar', fftshift_segs=False, khz=False, db=True, downsample_freq=False, 
                      xmin=None, xmax=None, ymin=None, ymax=None, wf_title=None, slabel=False, do_coherence=True, do_spectrum=True, do_means=False, ax=None, fig_num=1):
   """ Plots the power spectral density and phase coherence of an input waveform
-  
+  ,
   Parameters
   ------------
       wf: array
