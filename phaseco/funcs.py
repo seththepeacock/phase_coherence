@@ -2,6 +2,7 @@ import numpy as np
 from scipy.signal import get_window
 from scipy.fft import rfft, rfftfreq, fftshift
 import pywt
+import warnings
 
 
 def get_cwt(wf, fs, fb, f):
@@ -109,7 +110,7 @@ def spectral_filter(wf, fs, cutoff_freq, type='hp'):
   
   return filtered_wf
 
-def get_stft(wf, fs, tau, xi=None, N_segs=None, win_type='boxcar', filter_seg='none', fftshift_segs=False, return_dict=False):
+def get_stft(wf, fs, tau, xi=None, sigma=None, beta=None, win_type='boxcar', N_segs=None, filter_seg='none', fftshift_segs=False, return_dict=False):
   """ Returns a dict with the segmented fft and associated freq ax of the given waveform
 
   Parameters
@@ -122,10 +123,12 @@ def get_stft(wf, fs, tau, xi=None, N_segs=None, win_type='boxcar', filter_seg='n
         length (in time) of each window
       xi: float
         length (in time) between the start of successive segments
-      N_segs: int, Optional
-        If this isn't passed, then just get the maximum number of segments of the given size
+      sigma: double, Optional
+        Applies a Gaussian window with this standard deviation (in time) to each segment (win_type must be 'boxcar')
       win_type: String, Optional
         Window to apply before the FFT
+      N_segs: int, Optional
+        If this isn't passed, then just get the maximum number of segments of the given size
       filter_seg: String, Optional
         HPFs each individual segment by zeroing out frequencies above 100Hz frequency
       fftshift_segs: bool, Optional
@@ -173,12 +176,32 @@ def get_stft(wf, fs, tau, xi=None, N_segs=None, win_type='boxcar', filter_seg='n
   # Get window function (boxcar is no window)
   win = get_window(win_type, nperseg)
   
+  if beta is not None and sigma is not None:
+    raise Exception("You're windowing with a Gaussian and a Kaiser! Pick one!")
+  
+  if beta is not None:
+    kaiser = get_window(('kaiser', beta), nperseg)
+    print(kaiser)
+    win = kaiser * win # In normal use, win will just be a boxcar, but...
+    print(win) 
+    if win_type != 'boxcar': # Throw a warning if you're going to double window
+      warnings.warn(f"You're double-windowing with both a Kaiser (beta = {beta}) and a {win_type}!")
+  
+  if sigma is not None:
+    sigmaS = sigma*fs # Convert from time to samples
+    gaussian = get_window(('gauss', sigmaS), nperseg)
+    win = gaussian * win # In normal use, win will just be a boxcar, but... 
+    if win_type != 'boxcar': # Throw a warning if you're going to double window
+      warnings.warn(f"You're double-windowing with both a Gaussian (sigma = {sigma}) and a {win_type}!")
+  
+  
+  
   for k in range(N_segs):
     seg_start = seg_start_indices[k]
     seg_end = seg_start + nperseg
     # grab the waveform in this segment
     seg = wf[seg_start:seg_end]
-    if win_type != "boxcar":
+    if win_type != "boxcar" or sigma is not None or beta is not None:
       seg = seg * win
     if fftshift_segs: # optionally swap the halves of the waveform to effectively center it in time
       seg = fftshift(seg)
@@ -212,7 +235,7 @@ def get_stft(wf, fs, tau, xi=None, N_segs=None, win_type='boxcar', filter_seg='n
   else: 
     return freq_ax, stft
   
-def get_coherence(wf, fs, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=None, ref_type="next_seg", filter_seg=False, bin_shift=1, return_dict=False):
+def get_coherence(wf, fs, tau, xi, sigma=None, beta=None, win_type='boxcar', N_segs=None, reuse_stft=None, ref_type="next_seg", filter_seg=False, bin_shift=1, return_dict=False):
   """ Gets the phase coherence of the given waveform with the given window size
 
   Parameters
@@ -225,10 +248,12 @@ def get_coherence(wf, fs, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=No
         length (in time) of each segment
       xi: float
         length (in time) between the start of successive segments
-      N_segs: int, Optional
-        If this isn't passed, then just get the maximum number of segments of the given size
+      sigma: double, Optional
+        Applies a Gaussian window with this standard deviation (in time) to each segment (win_type must be 'boxcar')
       win_type: String, Optional
         Window to apply before the FFT
+      N_segs: int, Optional
+        If this isn't passed, then just get the maximum number of segments of the given size
       reuse_stft: tuple, Optional
         If you want to avoid recalculating the segmented fft, pass it in here along with the frequency axis as (freq_ax, stft)
       ref_type: str, Optional
@@ -252,7 +277,7 @@ def get_coherence(wf, fs, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=No
   
   # if nothing was passed into reuse_stft then we need to recalculate it
   if reuse_stft is None:
-    freq_ax, stft = get_stft(wf=wf, fs=fs, tau=tau, xi=xi, N_segs=N_segs, win_type=win_type, filter_seg=filter_seg)
+    freq_ax, stft = get_stft(wf=wf, fs=fs, tau=tau, xi=xi, N_segs=N_segs, sigma=sigma, beta=beta, win_type=win_type, filter_seg=filter_seg)
   else:
     freq_ax, stft = reuse_stft
     # Make sure these are valid
@@ -356,7 +381,7 @@ def get_coherence(wf, fs, tau, xi, N_segs=None, win_type='boxcar', reuse_stft=No
     return d
 
 
-def get_welch(wf, fs, tau, xi=None, N_segs=None, win_type='boxcar', scaling='density', reuse_stft=None, return_dict=False):
+def get_welch(wf, fs, tau, xi=None, beta=None, N_segs=None, win_type='boxcar', scaling='density', reuse_stft=None, return_dict=False):
   """ Gets the Welch averaged power of the given waveform with the given window size
 
   Parameters
@@ -367,11 +392,11 @@ def get_welch(wf, fs, tau, xi=None, N_segs=None, win_type='boxcar', scaling='den
         sample rate of waveform
       tau: float
         length (in time) of each window; used in get_stft and to calculate normalizing factor
+      win_type: String, Optional
+        Window to apply before the FFT
       N_segs: int, Optional
         Used in get_stft;
           if this isn't passed, then just gets the maximum number of segments of the given size
-      win_type: String, Optional
-        Window to apply before the FFT
       scaling: String, Optional
         "mags" (magnitudes) or "density" (PSD) or "spectrum" (power spectrum)
       reuse_stft: tuple, Optional
@@ -384,7 +409,7 @@ def get_welch(wf, fs, tau, xi=None, N_segs=None, win_type='boxcar', scaling='den
   """
   # if nothing was passed into reuse_stft then we need to recalculate it
   if reuse_stft is None:
-    freq_ax, stft = get_stft(wf=wf, fs=fs, tau=tau, xi=xi, N_segs=N_segs, win_type=win_type)
+    freq_ax, stft = get_stft(wf=wf, fs=fs, tau=tau, xi=xi, N_segs=N_segs, win_type=win_type, beta=beta)
   else:
     freq_ax, stft = reuse_stft
     # Make sure these are valid
