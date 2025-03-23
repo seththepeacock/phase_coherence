@@ -376,7 +376,7 @@ def get_welch(wf, fs, tau=None, tauS=None, xi=None, N_segs=None, win_type='boxca
   N_segs, N_bins = np.shape(stft)
   
   # Handle possibilities of tau and tauS
-  tauS = tau_or_tauS(fs, tau, tauS)
+  tau, tauS = tau_or_tauS(fs, tau, tauS)
   
   # initialize array
   segmented_spectrum = np.zeros((N_segs, N_bins))
