@@ -53,7 +53,7 @@ def spectral_filter(wf, fs, cutoff_freq, type='hp'):
   return filtered_wf
 
 def get_sigmaS(rho, xi, fs):
-  """ Gets sigmaS for get_window as a function of what proportion of xi you want the FWHM to be (rho)
+  """ Gets sigmaS for get_window as a function of what you want the FWHM to be (in seconds)
   """
   fwhm = rho * xi
   sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
@@ -140,22 +140,31 @@ def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', 
   # Initialize segmented waveform matrix
   segmented_wf = np.zeros((N_segs, tauS))
   
-  # Get window function (boxcar is no window)
-  win = get_window(win_type, tauS)
+  # Check how win_type has been passed in and get window accordingly
+  if isinstance(win_type, str) or (isinstance(win_type, tuple) and isinstance(win_type[0], str)):
+    # Get window function (boxcar is no window)
+    win = get_window(win_type, tauS)
+    if rho is not None:
+      sigmaS = get_sigmaS(rho, xi, fs)
+      gaussian = get_window(('gauss', sigmaS), tauS)
+      win = gaussian * win # In normal use, win will just be a boxcar, but... 
+      if win_type != 'boxcar': # Throw a warning if you're going to double window
+        warnings.warn(f"You're double-windowing with both a Gaussian and a {win_type}!")
+        
+  else: # Allow for passing in a custom window
+    win = win_type
+    if len(win) != tauS:
+      raise Exception(f"Your custom window must be the same length as tauS ({tauS})!")
   
-  if rho is not None:
-    sigmaS = get_sigmaS(rho, xi, fs)
-    gaussian = get_window(('gauss', sigmaS), tauS)
-    win = gaussian * win # In normal use, win will just be a boxcar, but... 
-    if win_type != 'boxcar': # Throw a warning if you're going to double window
-      warnings.warn(f"You're double-windowing with both a Gaussian and a {win_type}!")
+  # Check if we should be windowing or if unnecessary because they're all ones
+  do_windowing = (np.any(win != 1))
   
   for k in range(N_segs):
     seg_start = seg_start_indices[k]
     seg_end = seg_start + tauS
     # grab the waveform in this segment
     seg = wf[seg_start:seg_end]
-    if win_type != "boxcar" or rho is not None:
+    if do_windowing:
       seg = seg * win
     if fftshift_segs: # optionally swap the halves of the waveform to effectively center it in time
       seg = fftshift(seg)      
@@ -187,6 +196,38 @@ def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', 
   else: 
     return freq_ax, stft
   
+def get_asym_coherence(wf, fs, tauS, xi, rho=1, N_segs=None, double_fft=True):
+  # Get sigmaS for the gaussian part of the window
+  sigmaS = get_sigmaS(rho, xi, fs)
+  gaussian = get_window(('gauss', sigmaS), tauS)
+  left_window = np.ones(int(tauS))
+  right_window = np.ones(int(tauS))
+  left_window[0:int(tauS/2)] = gaussian[int(tauS/2):]
+  right_window[int(tauS/2):] = gaussian[0:int(tauS/2)]
+  if double_fft:
+    f, left_stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=xi, N_segs=N_segs, win_type=left_window)
+    f, right_stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=xi, N_segs=N_segs, win_type=right_window)
+    left_phases = np.angle(left_stft)
+    right_phases = np.angle(right_stft)
+    # calc phase diffs
+    N_bins = len(f)
+    phase_diffs = np.zeros((N_segs - 1, N_bins))
+    for win in range(N_segs - 1):
+      # take the difference between the phases in this current window and the next
+      phase_diffs[win] = right_phases[win + 1] - left_phases[win]
+
+  else:
+    f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=xi, N_segs=N_segs, win_type=(left_window))
+    phases = np.angle(stft)
+    # calc phase diffs
+    N_bins = len(f)
+    phase_diffs = np.zeros((N_segs - 1, N_bins))
+    for win in range(N_segs - 1):
+      # take the difference between the phases in this current window and the next
+      phase_diffs[win] = phases[win + 1] - phases[win]
+  coherence, avg_vector_angle = get_avg_vector(phase_diffs)
+
+  return f, coherence
   
 def get_coherence(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', N_segs=None, reuse_stft=None, ref_type="next_seg", cutoff_freq=None, bin_hop=1, return_dict=False):
   """ Gets the phase coherence of the given waveform with the given window size
@@ -255,9 +296,9 @@ def get_coherence(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxc
     phase_diffs = np.zeros((N_segs - 1, N_bins))
     
     # calc phase diffs
-    for win in range(N_segs - 1):
+    for seg in range(N_segs - 1):
       # take the difference between the phases in this current window and the next
-      phase_diffs[win] = phases[win + 1] - phases[win]
+      phase_diffs[seg] = phases[seg + 1] - phases[seg]
     
     coherence, avg_vector_angle = get_avg_vector(phase_diffs)
     
@@ -272,9 +313,9 @@ def get_coherence(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxc
     freq_ax = freq_ax[0:-bin_hop]
     
     # calc phase diffs
-    for win in range(N_segs):
+    for seg in range(N_segs):
       for freq_bin in range(N_bins - bin_hop):
-        phase_diffs[win, freq_bin] = phases[win, freq_bin + bin_hop] - phases[win, freq_bin]
+        phase_diffs[seg, freq_bin] = phases[seg, freq_bin + bin_hop] - phases[seg, freq_bin]
     
     # get final coherence
     coherence, avg_phase_diff = get_avg_vector(phase_diffs)
@@ -298,12 +339,12 @@ def get_coherence(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxc
     freq_ax = freq_ax[1:-1]
     
     # calc phase diffs
-    for win in range(N_segs):
+    for seg in range(N_segs):
       for freq_bin in range(1, N_bins - 1):
         # the - 1 is so that we start our phase_diffs arrays at 0 and put in N_bins-2 points. 
         # These will correspond to our new frequency axis.
-        pd_low[win, freq_bin - 1] = phases[win, freq_bin] - phases[win, freq_bin - 1]
-        pd_high[win, freq_bin - 1] = phases[win, freq_bin + 1] - phases[win, freq_bin]
+        pd_low[seg, freq_bin - 1] = phases[seg, freq_bin] - phases[seg, freq_bin - 1]
+        pd_high[seg, freq_bin - 1] = phases[seg, freq_bin + 1] - phases[seg, freq_bin]
     coherence_low, _ = get_avg_vector(pd_low)
     coherence_high, _ = get_avg_vector(pd_high)
     # average the coherences you would get from either of these
