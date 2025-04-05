@@ -5,9 +5,12 @@ import pywt
 import warnings
 
 
+"""
+HELPER FUNCTIONS
+"""
 
 
-# First, some helper functions
+
 def get_avg_vector(phases):
   """ Returns magnitude, phase of vector made by averaging over unit vectors with angles given by input phases
   
@@ -52,10 +55,16 @@ def spectral_filter(wf, fs, cutoff_freq, type='hp'):
   
   return filtered_wf
 
-def get_sigmaS(rho, xi, fs):
-  """ Gets sigmaS for get_window as a function of what you want the FWHM to be (in seconds)
+def get_sigmaS(fwhm, fs):
+  """ Gets sigmaS for (SciPy get_window) as a function of what you want the Gaussian FWHM to be (in seconds)
+  
+  Parameters
+  ------------
+      fwhm: float
+        FWHM of the Gaussian window (in seconds)
+      fs: int
+        sample rate
   """
-  fwhm = rho * xi
   sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
   sigmaS = sigma * fs
   return sigmaS
@@ -73,6 +82,14 @@ def tau_or_tauS(fs, tau, tauS):
       tau = tauS/fs
   return tau, int(tauS)
 
+
+
+"""
+PRIMARY FUNCTIONS
+"""
+
+
+
 def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', N_segs=None, cutoff_freq=None, fftshift_segs=False, return_dict=False):
   """ Returns the segmented fft and associated freq ax of the given waveform
 
@@ -86,8 +103,8 @@ def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', 
         length (in time) of each window
       xi: float
         length (in time) between the start of successive segments
-      sigma: double, Optional
-        Applies a Gaussian window with this standard deviation (in time) to each segment (win_type must be 'boxcar')
+      rho: double, Optional
+        Applies a Gaussian window with whose FWHM is rho*xi
       win_type: String, Optional
         Window to apply before the FFT
       N_segs: int, Optional
@@ -95,7 +112,7 @@ def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', 
       cutoff_freq: double, Optional
         HPFs the total waveform by zeroing out frequencies above this frequency
       fftshift_segs: bool, Optional
-        Shifts each time-domain window of the fft with fftshift()
+        Shifts each time-domain window of the fft with fftshift() to center your window in time and make it zero-phase (no effect on coherence)
       return_dict: bool, Optional
         Returns a dict with:
         d["freq_ax"] = freq_ax
@@ -145,7 +162,7 @@ def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', 
     # Get window function (boxcar is no window)
     win = get_window(win_type, tauS)
     if rho is not None:
-      sigmaS = get_sigmaS(rho, xi, fs)
+      sigmaS = get_sigmaS(fwhm=rho*xi, fs=fs) # rho is the proportion of xi which we want the FWHM to be
       gaussian = get_window(('gauss', sigmaS), tauS)
       win = gaussian * win # In normal use, win will just be a boxcar, but... 
       if win_type != 'boxcar': # Throw a warning if you're going to double window
@@ -196,38 +213,6 @@ def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', 
   else: 
     return freq_ax, stft
   
-def get_asym_coherence(wf, fs, tauS, xi, rho=1, N_segs=None, double_fft=True):
-  # Get sigmaS for the gaussian part of the window
-  sigmaS = get_sigmaS(rho, xi, fs)
-  gaussian = get_window(('gauss', sigmaS), tauS)
-  left_window = np.ones(int(tauS))
-  right_window = np.ones(int(tauS))
-  left_window[0:int(tauS/2)] = gaussian[int(tauS/2):]
-  right_window[int(tauS/2):] = gaussian[0:int(tauS/2)]
-  if double_fft:
-    f, left_stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=xi, N_segs=N_segs, win_type=left_window)
-    f, right_stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=xi, N_segs=N_segs, win_type=right_window)
-    left_phases = np.angle(left_stft)
-    right_phases = np.angle(right_stft)
-    # calc phase diffs
-    N_bins = len(f)
-    phase_diffs = np.zeros((N_segs - 1, N_bins))
-    for win in range(N_segs - 1):
-      # take the difference between the phases in this current window and the next
-      phase_diffs[win] = right_phases[win + 1] - left_phases[win]
-
-  else:
-    f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=xi, N_segs=N_segs, win_type=(left_window))
-    phases = np.angle(stft)
-    # calc phase diffs
-    N_bins = len(f)
-    phase_diffs = np.zeros((N_segs - 1, N_bins))
-    for win in range(N_segs - 1):
-      # take the difference between the phases in this current window and the next
-      phase_diffs[win] = phases[win + 1] - phases[win]
-  coherence, avg_vector_angle = get_avg_vector(phase_diffs)
-
-  return f, coherence
   
 def get_coherence(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', N_segs=None, reuse_stft=None, ref_type="next_seg", cutoff_freq=None, bin_hop=1, return_dict=False):
   """ Gets the phase coherence of the given waveform with the given window size
@@ -376,7 +361,57 @@ def get_coherence(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxc
     d["freq_ax"] = freq_ax
     d["stft"] = stft
     return d
+  
+def get_asym_coherence(wf, fs, tauS, xi, fwhm=None, rho=None, N_segs=None):
+  """ Gets the coherence using an asymmetric window (likely will eventually be assimilated as an option in get_coherence())
+  Parameters
+  ------------
+      wf: array
+        waveform input array
+      fs: int
+        sampling rate of waveform
+      tauS: int
+        length (in samples) of each window
+      xi: float
+        amount (in time) between the start points of adjacent segments
+      fwhm: double, Optional
+        FWHM of the Gaussian window (in seconds), need either this or rho
+      rho: double, Optional
+        Applies a Gaussian window whose FWHM is rho*xi, need either this or fwhm
+  """
+  
+  # Get sigmaS for the gaussian part of the window either via rho (dynamic FWHM = rho*xi) or fixed FWHM
+  if fwhm is None and rho is None:
+    raise ValueError("You must input either FWHM or rho!")
+  elif fwhm is not None:
+    sigmaS = get_sigmaS(fwhm=fwhm, fs=fs)
+  elif rho is not None:
+    sigmaS = get_sigmaS(fwhm=rho*xi, fs=fs)
+    
+    
+  # Generate gaussian
+  gaussian = get_window(('gauss', sigmaS), tauS)
+  left_window = np.ones(int(tauS))
+  right_window = np.ones(int(tauS))
+  left_window[int(tauS/2):] = gaussian[int(tauS/2):] # Left window starts with ones and ends with gaussian (gaussian on overlapping side)
+  right_window[0:int(tauS/2)] = gaussian[0:int(tauS/2)] # Vice versa
 
+  # Get STFTs for each side
+  f, left_stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=xi, N_segs=N_segs, win_type=left_window)
+  f, right_stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=xi, N_segs=N_segs, win_type=right_window)
+  # Extract angles
+  left_phases = np.angle(left_stft)
+  right_phases = np.angle(right_stft)
+  # Calc phase diffs
+  N_bins = len(f) # Number of frequency bins
+  phase_diffs = np.zeros((N_segs - 1, N_bins))
+  for win in range(N_segs - 1):
+    # Take the difference between the phases, with the windows aligned as to minimize shared samples
+    phase_diffs[win] = right_phases[win + 1] - left_phases[win]
+
+  coherence, avg_vector_angle = get_avg_vector(phase_diffs) # Get vector strength
+
+  return f, coherence
 
 def get_welch(wf, fs, tau=None, tauS=None, xi=None, N_segs=None, win_type='boxcar', scaling='density', reuse_stft=None, return_dict=False):
   """ Gets the Welch averaged power of the given waveform with the given window size
@@ -463,8 +498,7 @@ def get_welch(wf, fs, tau=None, tauS=None, xi=None, N_segs=None, win_type='boxca
       "freq_ax" : freq_ax,
       "spectrum" : spectrum,
       "segmented_spectrum" : segmented_spectrum
-      }
-    
+      }    
 
 def get_cwt(wf, fs, fb, f):
   """ Returns the CWT coefficients of the given waveform with a complex morelet wavelet
