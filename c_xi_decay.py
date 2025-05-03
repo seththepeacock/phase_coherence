@@ -173,7 +173,7 @@ for wf_idx in tqdm([0, 2, 4, 5, 6, 7]):
     min_fit_xi_idx = 1
     trim_step = 5
     sigma_weighting_power = 1 # > 0 means less weight on lower coherence bins
-    A_restrict = True
+    A_restrict = False
          
 
     # Plotting parameters
@@ -229,7 +229,7 @@ for wf_idx in tqdm([0, 2, 4, 5, 6, 7]):
             popt = None
             while len(x_fit) > trim_step and popt is None:
                 try:
-                    popt, pcov = curve_fit(exp_decay, x_fit, y_fit, p0=[1, 1], sigma=sigma, bounds=([0, 0], [1, A_max]), absolute_sigma=True)
+                    popt, pcov = curve_fit(exp_decay, x_fit, y_fit, p0=[1, 1], sigma=sigma, bounds=([0, 0], [A_max, np.inf]), absolute_sigma=True)
                     break  # Fit succeeded!
                 except (RuntimeError, ValueError) as e:
                     attempts += 1
