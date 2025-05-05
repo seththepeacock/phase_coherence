@@ -19,13 +19,12 @@ def plot_colossogram(coherences, f, xis, tau, title=None, max_khz=None, cmap='ma
     cbar.set_label("Vector Strength")
     if max_khz is not None:
         plt.ylim(0, max_khz)
-    else:
-        plt.ylim(0, 6)
+
     # set axes labels and titles
     plt.xlabel(rf"$\xi$ [ms]")
     plt.ylabel("Frequency [kHz]")
     if title is None:
-        title = rf"Colossogram with $\tau={tau:.3f}$"
+        title = rf"Colossogram with $\tau={tau:.3f}s$"
     plt.title(title)
 
 def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scaling='density', ref_type="next_win", win_type='boxcar', fftshift_segs=False, khz=False, db=True, downsample_freq=False, 
