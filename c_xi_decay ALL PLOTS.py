@@ -59,7 +59,7 @@ def exp_decay(x, tc, amp):
     return amp * np.exp(-x/tc)
 
 def gauss_decay(x, tc, amp):
-    return amp * np.exp(-x**2/tc)
+    return amp * np.exp(-(x/tc)**2)
 
 def sigmoid_amp(x, tc, amp):
     return amp / (1 + np.exp((x)/tc))
@@ -84,7 +84,7 @@ del df
 
 
 # Run various loops 
-for rho in [1.0, 1.5, 2, None]:
+for rho in [0.7]:
     for A_max in [1, np.inf]:
         for fit_func_type in ['exp', 'gauss', 'sigmoid_amp', 'sigmoid_loc', 'sigmoid_amp_loc']:
             # Skip some of the combos
@@ -263,7 +263,7 @@ for rho in [1.0, 1.5, 2, None]:
                     case 'gauss':
                         bounds = ([0, 0], [np.inf, A_max]) # [tc, amp]
                         fit_func = gauss_decay
-                        param2 = 'A'
+                        param2_label = 'A'
                     case 'sigmoid_amp':
                         bounds = ([0, 0], [np.inf, A_max]) # [tc, amp]
                         fit_func = sigmoid_amp
