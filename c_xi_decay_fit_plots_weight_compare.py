@@ -78,7 +78,7 @@ for species in ['Anolis', 'Owl', 'Human']:
     for i in range (3):
         row = df_species.iloc[i]
         wf_fn = row['filepath'].split('\\')[-1]
-        wf_list.append((row['wf'], row['sr'], wf_fn, species))
+        wf_list.append((row['wf'], 44100, wf_fn, species))
 del df
 
 
@@ -87,20 +87,8 @@ del df
 for sigma_weighting_power in [0, -1]:
     for wf_idx in [0, 2, 4, 5, 6, 7]: # Started with 0, 2 (Lizard) - 4, 5 (Owl) - 6, 7 (Human)
         wf, fs, wf_fn, species = wf_list[wf_idx]
-
-        # Set parameters (same for human and lizard)
-        rho = 0.7
-        tau = 2**12 / 44100 # Everyone uses the same tau
-        tauS = int(tau*fs)
-        # Raise warning if tauS is not a power of two AND the samplerate is indeed 44100
-        if np.log2(tauS) != int(np.log2(tauS)):
-            if fs == 44100:
-                raise ValueError("tauS is not a power of 2, but the samplerate is 44100!")
-            # else:
-            #     print(f"WARNING: tauS is not a power of 2, but the samplerate is {fs} (not 44100), so we'll assume you're just ensuring tau aligns with other waveforms!")
-
         
-
+        # Set species-specific parameters
         if species == 'Human':
             # Human parameters
             min_xi = 0.001
@@ -121,6 +109,21 @@ for sigma_weighting_power in [0, -1]:
             max_xi = 0.1
             delta_xi = 0.0005
             max_khz = 12
+            if 'OWL_OWL' in wf_fn.upper():
+                fs = 48000
+                print(f"Changing samplerate of {wf_fn} to 48000Hz")
+                
+        # Set parameters (same for human and lizard)
+        rho = 0.7
+        tau = 2**12 / 44100 # Everyone uses the same tau
+        tauS = int(tau*fs)
+        # Raise warning if tauS is not a power of two AND the samplerate is indeed 44100
+        if np.log2(tauS) != int(np.log2(tauS)):
+            if fs == 44100:
+                raise ValueError("tauS is not a power of 2, but the samplerate is 44100!")
+            # else:
+            #     print(f"WARNING: tauS is not a power of 2, but the samplerate is {fs} (not 44100), so we'll assume you're just ensuring tau aligns with other waveforms!")
+
 
 
             
@@ -128,7 +131,7 @@ for sigma_weighting_power in [0, -1]:
         # Open coherences, or calculate if needed
         suptitle=rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [$\sigma_{{\text{{fit}}}} = y^{ {sigma_weighting_power} }$]"
         fn_id = rf"{species}, {wf_fn.split('.')[0]}"
-        pkl_fn_id = rf"tau={tau*1000:.0f}, rho={rho}, {species}, {wf_fn.split('.')[0]}"
+        pkl_fn_id = rf"tau={tau*1000:.0f}, fs={fs}, rho={rho}, {species}, {wf_fn.split('.')[0]}"
         pkl_fn = f'C_xi Decay Coherences - {pkl_fn_id}'
         pkl_folder = r'Pickles/'
         fig_folder = r'Figures/C_xi Decay Figures/C_xi Decay Fits - Weighting Comparison'
@@ -153,7 +156,6 @@ for sigma_weighting_power in [0, -1]:
             
             with open(pkl_folder + pkl_fn + '.pkl', 'wb') as file:
                 pickle.dump((coherences, f, xis, tau, rho, wf_fn, species), file)
-            
         
         # Peak pick the target bins
         if wf_fn == 'anole_AC6rearSOAEwfB1.mat': # 0
@@ -163,10 +165,10 @@ for sigma_weighting_power in [0, -1]:
             peak_freqs = [990, 2000, 3670]
             noise_freqs = [400, 12000]
         elif wf_fn == 'owl_Owl6L1.mat': # 4
-            peak_freqs = [4867, 6384, 7235]
+            peak_freqs = [5298, 6945, 7881]
             noise_freqs = [400, 12000]
         elif wf_fn == 'owl_TAG4learSOAEwf1.mat': # 5
-            peak_freqs = [6280, 7820, 10487]
+            peak_freqs = [5770, 7181, 9636]
             noise_freqs = [400, 12000]
         elif wf_fn == 'human_TH14RearwaveformSOAE.mat': # 6
             peak_freqs = [603, 2250, 4370]
@@ -182,11 +184,15 @@ for sigma_weighting_power in [0, -1]:
         bin_names = []
 
         for peak_freq in peak_freqs:
-            bin_idxs.append(np.argmin(np.abs(f - peak_freq)))
+            bin_idx = np.argmin(np.abs(f - peak_freq))
+            bin_idxs.append(bin_idx)
+            peak_freq = f[bin_idx]
             bin_names.append(f"{peak_freq:.0f}Hz Peak")
 
         for noise_freq in noise_freqs:
-            bin_idxs.append(np.argmin(np.abs(f - noise_freq)))
+            bin_idx = np.argmin(np.abs(f - peak_freq))
+            bin_idxs.append(bin_idx)
+            noise_freq = f[bin_idx]
             bin_names.append(f"{noise_freq:.0f}Hz Noise")
             
         freq_list = peak_freqs + noise_freqs
@@ -231,7 +237,7 @@ for sigma_weighting_power in [0, -1]:
         # Take care of effects of parameters
 
         # Take care of A restriction
-        suptitle=rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [{fit_func_type} fit]   [$\sigma_{{\text{{fit}}}} = y^{ {sigma_weighting_power} }$]" 
+        suptitle=rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [$f_s$={fs/1000:.1f}kHz]   [{fit_func_type} fit]   [$\sigma_{{\text{{fit}}}} = y^{ {sigma_weighting_power} }$]" 
         if fit_func_type!='sigmoid_loc':
             if A_max == 1:
                 suptitle = suptitle + r"   [$A \in [0, 1]$]]"
