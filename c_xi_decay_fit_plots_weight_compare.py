@@ -216,7 +216,7 @@ for sigma_weighting_power in [0, -1]:
 
 
 
-        # Plotting parameters
+        # N_xi fit plotting parameters
         s_signal=1
         s_noise=1
         s_decayed = 100
