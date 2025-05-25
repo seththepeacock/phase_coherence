@@ -29,7 +29,7 @@ for species in ['Anole']:
         force_recalc_coherences = 0
         # Lizard
         if wf_fn in ['AC6rearSOAEwfB1.mat', 'ACsb4rearSOAEwf1.mat', 'ACsb24rearSOAEwfA1.mat', 'ACsb30learSOAEwfA2.mat']:
-            max_xi = 0.2
+            max_xi = 0.1
             max_khz = 6
         # Human
         elif wf_fn in ['ALrearSOAEwf1.mat', 'JIrearSOAEwf2.mat', 'LSrearSOAEwf1.mat', 'TH13RearwaveformSOAE.mat']:
@@ -37,7 +37,7 @@ for species in ['Anole']:
             max_khz = 6
         # Owl
         elif wf_fn in ['Owl2R1.mat', 'Owl7L1.mat', 'TAG6rearSOAEwf1.mat', 'TAG9rearSOAEwf2.mat']:
-            max_xi = 0.2
+            max_xi = 0.1
             max_khz = 12
         
         # Z-Test Parameters
