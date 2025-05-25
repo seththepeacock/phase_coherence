@@ -11,10 +11,10 @@ import matplotlib.patheffects as pe
 from tqdm import tqdm
 
 
-for species in ['Anole', 'Human', 'Owl']:
-    for wf_idx in [0, 1, 2, 3]:
-# for species in ['Anole']:
-#     for wf_idx in [0]:
+# for species in ['Anole', 'Human', 'Owl']:
+#     for wf_idx in [0, 1, 2, 3]:
+for species in ['Anole']:
+    for wf_idx in [0]:
         
         wf, wf_fn, fs, peak_freqs, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
         print(f"Processing {wf_fn}")

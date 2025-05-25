@@ -3,6 +3,7 @@ from scipy.signal import get_window
 from scipy.fft import rfft, rfftfreq, fftshift
 import pywt
 import warnings
+from tqdm import tqdm
 
 
 """
@@ -361,7 +362,58 @@ def get_coherence(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxc
     d["freq_ax"] = freq_ax
     d["stft"] = stft
     return d
+
+def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, N_phase_diffs_held_const, global_max_xiS=None):
+  num_xis = int((max_xi - min_xi) / delta_xi) + 1
+  xis = np.linspace(min_xi, max_xi, num_xis)
+  min_xiS = min_xi * fs
+  max_xiS = max_xi * fs
+  seg_spacingS = min_xiS
+  if seg_spacingS != delta_xi*fs:
+    raise Exception("seg_spacingS(=min_xi) must be equal to delta_xiS or else our xi values won't correspond to referencing to an integer number of segs away!")
+  if global_max_xiS is None: # This is an option in case you want the number of averages to be constant across species (which have diff max_xiS)
+    global_max_xiS = max_xiS
   
+  N_bins = len(np.array(rfftfreq(tauS, 1/fs)))
+  
+  # Initialize output array
+  coherences = np.zeros((N_bins, len(xis)))
+  
+  for i, xi in enumerate(tqdm(xis)):
+    xiS = xi * fs
+    # Get number of averages
+    if N_phase_diffs_held_const:
+      # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 in old case) ones won't have a reference.
+      N_phase_diffs = int((len(wf) - tauS - global_max_xiS) / seg_spacingS) + 1 
+    else:
+      # Same as above, except just use the current xiS rather than the max xiS
+      N_phase_diffs = int((len(wf) - tauS - xiS) / seg_spacingS) + 1
+    sigmaS = get_sigmaS(fwhm=rho*xi, fs=fs)
+    f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=min_xi, win_type=("gaussian", sigmaS))
+    
+    # Check your math
+    if xi == max_xi:
+      if np.shape(stft)[0] != N_phase_diffs:
+        print("DID YOU CALCULATE N_phase_diffs WRONG?")
+    
+    # initialize array for phase diffs
+    phase_diffs = np.zeros((N_phase_diffs, N_bins))
+    
+    # get phases
+    phases=np.angle(stft)
+    
+    # calc phase diffs
+    for seg in range(N_phase_diffs):
+      # take the difference between the phases in this current window and the one xi away
+      # First, make sure this all makes sense
+      if int(xiS/seg_spacingS) - (xiS/seg_spacingS) > 1e-12:
+        raise Exception("xiS/seg_spacingS = " + str(xiS/seg_spacingS) + " -- this should be an integer!")
+      
+      phase_diffs[seg] = phases[seg + int(xiS/seg_spacingS)] - phases[seg]
+    
+    coherences[:, i] = get_avg_vector(phase_diffs)[0]
+  
+
 def get_asym_coherence(wf, fs, tauS, xi, fwhm=None, rho=None, N_segs=None):
   """ Gets the coherence using an asymmetric window (likely will eventually be assimilated as an option in get_coherence())
   Parameters

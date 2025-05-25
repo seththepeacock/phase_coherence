@@ -14,10 +14,12 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
     wf_folder = N_xi_folder + r'Waveforms/'
     wf = sio.loadmat(wf_folder + wf_fn)['wf'][:, 0]
     # Get fs
-    if wf_fn in ['Owl2R1.mat', 'Owl7L1.mat', 'TAG6rearSOAEwf1.mat', 'TAG9rearSOAEwf2.mat']:
+    if wf_fn in ['Owl2R1.mat', 'Owl7L1.mat']:
         fs = 48000
     else:
         fs = 44100
+    # Crop to 60s for consistency
+    wf = wf[:int(60*fs)]
     # Get peak list
     match wf_fn:
         # Anoles
