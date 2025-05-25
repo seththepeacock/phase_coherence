@@ -26,28 +26,39 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             bad_fit_freqs = []
         case 'ACsb4rearSOAEwf1.mat': #1
             peak_freqs = []
+            bad_fit_freqs = []
         case 'ACsb24rearSOAEwfA1.mat': #2    
             peak_freqs = []
+            bad_fit_freqs = []
         case 'ACsb30learSOAEwfA2.mat': #3
             peak_freqs = []
+            bad_fit_freqs = []
         # Humans
         case 'ALrearSOAEwf1.mat': #0
             peak_freqs = []
+            bad_fit_freqs = []
         case 'JIrearSOAEwf2.mat': #1
             peak_freqs = []
+            bad_fit_freqs = []
         case 'LSrearSOAEwf1.mat': #2
             peak_freqs = []
+            bad_fit_freqs = []
         case 'TH13RearwaveformSOAE.mat': #3
             peak_freqs = []
+            bad_fit_freqs = []
         # Owls
         case 'Owl2R1.mat': #0
             peak_freqs = []
+            bad_fit_freqs = []
         case 'Owl7L1.mat': #1
             peak_freqs = []
+            bad_fit_freqs = []
         case 'TAG6rearSOAEwf1.mat': #2
             peak_freqs = []
+            bad_fit_freqs = []
         case 'TAG9rearSOAEwf2.mat': #3
             peak_freqs = []
+            bad_fit_freqs = []
     return wf, wf_fn, fs, np.array(peak_freqs), np.array(bad_fit_freqs)
         
 def get_fn(species, idx):

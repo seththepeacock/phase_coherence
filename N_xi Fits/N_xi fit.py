@@ -11,10 +11,10 @@ import matplotlib.patheffects as pe
 from tqdm import tqdm
 
 
-# for species in ['Anole', 'Human', 'Owl']:
-#     for wf_idx in [0, 1, 2, 3]:
-for species in ['Anole']:
-    for wf_idx in [0]:
+for species in ['Anole', 'Human', 'Owl']:
+    for wf_idx in [0, 1, 2, 3]:
+# for species in ['Anole']:
+#     for wf_idx in [0]:
         
         wf, wf_fn, fs, peak_freqs, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
         print(f"Processing {wf_fn}")
@@ -27,18 +27,6 @@ for species in ['Anole']:
         delta_xi = 0.0005
         min_xi = delta_xi
         force_recalc_coherences = 0
-        # Lizard
-        if wf_fn in ['AC6rearSOAEwfB1.mat', 'ACsb4rearSOAEwf1.mat', 'ACsb24rearSOAEwfA1.mat', 'ACsb30learSOAEwfA2.mat']:
-            max_xi = 0.1
-            max_khz = 6
-        # Human
-        elif wf_fn in ['ALrearSOAEwf1.mat', 'JIrearSOAEwf2.mat', 'LSrearSOAEwf1.mat', 'TH13RearwaveformSOAE.mat']:
-            max_xi = 1
-            max_khz = 6
-        # Owl
-        elif wf_fn in ['Owl2R1.mat', 'Owl7L1.mat', 'TAG6rearSOAEwf1.mat', 'TAG9rearSOAEwf2.mat']:
-            max_xi = 0.1
-            max_khz = 12
         
         # Z-Test Parameters
         sample_hw = 10
@@ -49,14 +37,12 @@ for species in ['Anole']:
         trim_step = 10
         A_max = np.inf # 1 or np.inf
         sigma_weighting_power = 0 # > 0 means less weight on lower coherence bins 
-        
-
 
         # Plotting parameters
-        plotting_colossogram = 0
+        plotting_colossogram = 1
         plotting_peak_picks = 0
-        plotting_fits = 1
-        show_plots = 1
+        plotting_fits = 0
+        show_plots = 0
         s_signal=1
         s_noise=1
         s_decayed = 100
@@ -73,6 +59,20 @@ for species in ['Anole']:
         edgecolor_decayed='black'
         crop=False
         colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+        
+        # Species specific params
+        # Lizard
+        if wf_fn in ['AC6rearSOAEwfB1.mat', 'ACsb4rearSOAEwf1.mat', 'ACsb24rearSOAEwfA1.mat', 'ACsb30learSOAEwfA2.mat']:
+            max_xi = 0.1
+            max_khz = 6
+        # Human
+        elif wf_fn in ['ALrearSOAEwf1.mat', 'JIrearSOAEwf2.mat', 'LSrearSOAEwf1.mat', 'TH13RearwaveformSOAE.mat']:
+            max_xi = 1
+            max_khz = 6
+        # Owl
+        elif wf_fn in ['Owl2R1.mat', 'Owl7L1.mat', 'TAG6rearSOAEwf1.mat', 'TAG9rearSOAEwf2.mat']:
+            max_xi = 0.1
+            max_khz = 12
         
         "Set filepaths"
         fn_id = rf"tau={tau*1000:.0f}ms, rho={rho}, {species}, {wf_fn.split('.')[0]}"
@@ -114,10 +114,9 @@ for species in ['Anole']:
             print("Plotting Colossogram")
             plt.close('all')
             plt.figure(figsize=(15, 5))
-            print(len(xis))
             plot_colossogram(coherences, f, xis, tau, max_khz=max_khz, cmap='magma')
             for peak_idx in peak_idxs:
-                plt.scatter(max_xi/100, f[peak_idx] / 1000, c='w', marker='>', label="Peak at " + f"{f[peak_idx]:0f}Hz")
+                plt.scatter(max_xi/10, f[peak_idx] / 1000, c='w', marker='>', label="Peak at " + f"{f[peak_idx]:0f}Hz", s=100)
             plt.title(f"{species} Colossogram", fontsize=18)
             plt.suptitle(suptitle, fontsize=10)
             os.makedirs(f'{fig_folder}\Colossograms', exist_ok=True)
