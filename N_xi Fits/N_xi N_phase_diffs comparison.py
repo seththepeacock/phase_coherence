@@ -18,6 +18,7 @@ wf_idx = 0
 for species in ['Anole']:
     for seths_way in [True, False]:
         for N_phase_diffs_held_const in [True, False]:
+            print("Seths way:", seths_way, "N held const:", N_phase_diffs_held_const)
             wf, wf_fn, fs, peak_freqs, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
             print(f"Processing {wf_fn}")
             
@@ -43,7 +44,7 @@ for species in ['Anole']:
             # Plotting parameters
             plotting_colossogram = 1
             plotting_peak_picks = 0
-            plotting_fits = 0
+            plotting_fits = 1
             show_plots = 0
             s_signal=1
             s_noise=1
@@ -79,15 +80,15 @@ for species in ['Anole']:
             "Set filepaths"
             fn_id = rf"tau={tau*1000:.0f}ms, rho={rho}, {species}, {wf_fn.split('.')[0]}"
             suptitle = rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]"
+            if seths_way:
+                suptitle+= "   [seth new way]"
+                fn_id += ", seth new way"
             if N_phase_diffs_held_const:
                 suptitle+= "   [N_phase_diffs held constant]"
                 fn_id += ", N_phase_diffs held const"
             else:
-                suptitle+= "   [N_phase_diffs not held constant, use max amount of wf]"
+                suptitle+= "   [Use max amount of wf]"
                 fn_id += ", max amount of wf"
-            if seths_way:
-                suptitle+= "   [seth new way]"
-                fn_id += ", seth new way"
             pkl_fn = f'C_xi Decay Coherences - {fn_id}'
             N_xi_folder = r'N_xi Fits/N_phase_diffs Comparison/'
             pkl_folder = N_xi_folder + r'Coherences Pickles/'
@@ -105,7 +106,7 @@ for species in ['Anole']:
             else:
                 print(f"Calculating coherences for {wf_fn} with rho={rho}")
                 if seths_way:
-                    coherences = get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, N_phase_diffs_held_const)
+                    f, xis, coherences = get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, N_phase_diffs_held_const)
                 else:
                     num_xis = int((max_xi - min_xi) / delta_xi) + 1
                     xis = np.linspace(min_xi, max_xi, num_xis)
@@ -114,7 +115,7 @@ for species in ['Anole']:
                     f = np.array(rfftfreq(tauS, 1/fs))
                     # Make sure we have a consistent number of segments to take vector strength over since this will change with xi
                     if N_phase_diffs_held_const:
-                        N_segs = int((len(wf) - tauS) / max_xiS)
+                        N_segs = int((len(wf) - tauS) / max_xiS) + 1
                     else:
                         N_segs = None
 

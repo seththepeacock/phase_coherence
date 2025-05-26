@@ -142,7 +142,7 @@ def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', 
   final_wf_index = len(wf) - 1
     
   # next, we get what we would be the largest potential seg_start_index
-  latest_potential_seg_start_index = final_wf_index - (tauS - 1) # start at the final_wf_index. we need to collect nperseg points. this final index is our first one, and then we need nperseg - 1 more. 
+  latest_potential_seg_start_index = final_wf_index - (tauS - 1) # start at the final_wf_index. we need to collect nperseg points. this final index is our first one, and then we need tauS - 1 more. 
   seg_start_indices = np.arange(0, latest_potential_seg_start_index + 1, xiS)
     # the + 1 here is because np.arange won't ever include the "stop" argument in the output array... but it could include (stop - 1) which is just our final_seg_start_index!
 
@@ -154,7 +154,8 @@ def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', 
   else:
     # if no N_segs is passed in, we'll just use the max number of segments
     N_segs = len(seg_start_indices)
-
+    # this is equivalent to int((len(wf) - tauS) / xiS) + 1
+  
   # Initialize segmented waveform matrix
   segmented_wf = np.zeros((N_segs, tauS))
   
@@ -391,11 +392,6 @@ def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, N_phase_diffs_he
     sigmaS = get_sigmaS(fwhm=rho*xi, fs=fs)
     f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=min_xi, win_type=("gaussian", sigmaS))
     
-    # Check your math
-    if xi == max_xi:
-      if np.shape(stft)[0] != N_phase_diffs:
-        print("DID YOU CALCULATE N_phase_diffs WRONG?")
-    
     # initialize array for phase diffs
     phase_diffs = np.zeros((N_phase_diffs, N_bins))
     
@@ -412,6 +408,7 @@ def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, N_phase_diffs_he
       phase_diffs[seg] = phases[seg + int(xiS/seg_spacingS)] - phases[seg]
     
     coherences[:, i] = get_avg_vector(phase_diffs)[0]
+  return f, xis, coherences
   
 
 def get_asym_coherence(wf, fs, tauS, xi, fwhm=None, rho=None, N_segs=None):

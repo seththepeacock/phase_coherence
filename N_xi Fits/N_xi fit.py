@@ -98,7 +98,7 @@ for species in ['Anole']:
             max_xiS = max(xis) * fs
             f = np.array(rfftfreq(tauS, 1/fs))
             # Make sure we have a consistent number of segments to take vector strength over since this will change with xi
-            N_segs = int((len(wf) - tauS) / max_xiS)
+            N_segs = int((len(wf) - tauS) / max_xiS) + 1
 
             coherences = np.zeros((len(f), len(xis)))
             for i, xi in enumerate(tqdm(xis)):
