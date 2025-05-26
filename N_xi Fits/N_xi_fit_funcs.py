@@ -4,6 +4,7 @@ import scipy as sp
 from scipy.optimize import curve_fit
 
 def get_wf(wf_fn=None, species=None, wf_idx=None):
+    wf_length = 60
     if wf_fn is None:
         if species is None or wf_idx is None:
             raise ValueError("You must input either fn or species and idx!")
@@ -19,7 +20,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
     else:
         fs = 44100
     # Crop to 60s for consistency
-    wf = wf[:int(60*fs)]
+    wf = wf[:int(wf_length*fs)]
     # Get peak list
     match wf_fn:
         # Anoles
@@ -37,7 +38,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             bad_fit_freqs = []
         # Humans
         case 'ALrearSOAEwf1.mat': #0
-            peak_freqs = []
+            peak_freqs = [2660, 2940, 3220, 3870]
             bad_fit_freqs = []
         case 'JIrearSOAEwf2.mat': #1
             peak_freqs = []

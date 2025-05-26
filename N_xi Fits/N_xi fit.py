@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 # for species in ['Anole', 'Human', 'Owl']:
 #     for wf_idx in [0, 1, 2, 3]:
-for species in ['Anole']:
+for species in ['Human']:
     for wf_idx in [0]:
         
         wf, wf_fn, fs, peak_freqs, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
@@ -21,12 +21,13 @@ for species in ['Anole']:
         
         "PARAMETERS"
         # Coherence Parameters
-        rho = 0.7
-        tau = 2**13 / 44100 # Everyone uses the same tau
+        rho = 0.6
+        tau = 2**12 / 44100 # Everyone uses the same tau
         tauS = int(tau*fs)
-        delta_xi = 0.0005
+        delta_xi = 0.001
         min_xi = delta_xi
         force_recalc_coherences = 0
+        
         
         # Z-Test Parameters
         sample_hw = 10
@@ -39,10 +40,10 @@ for species in ['Anole']:
         sigma_weighting_power = 0 # > 0 means less weight on lower coherence bins 
 
         # Plotting parameters
-        plotting_colossogram = 1
-        plotting_peak_picks = 0
+        plotting_colossogram = 0
+        plotting_peak_picks = 1
         plotting_fits = 0
-        show_plots = 0
+        show_plots = 1
         s_signal=1
         s_noise=1
         s_decayed = 100
@@ -103,7 +104,7 @@ for species in ['Anole']:
             coherences = np.zeros((len(f), len(xis)))
             for i, xi in enumerate(tqdm(xis)):
                 coherences[:, i] = get_coherence(wf=wf, fs=fs, tauS=tauS, xi=xi, ref_type="next_seg", N_segs=N_segs, rho=rho)[1]
-            
+            os.makedirs(pkl_folder, exist_ok=True)
             with open(pkl_folder + pkl_fn + '.pkl', 'wb') as file:
                 pickle.dump((coherences, f, xis, tau, rho, wf_fn, species), file)
         # Get peak bin indices

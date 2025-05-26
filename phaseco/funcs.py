@@ -154,6 +154,8 @@ def get_stft(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxcar', 
   else:
     # if no N_segs is passed in, we'll just use the max number of segments
     N_segs = len(seg_start_indices)
+    if N_segs != int((len(wf) - tauS) / xiS) + 1:
+      print(f'Hm THATS WEIRD - N_SEGS METHOD 1 gives {N_segs} while other method gives {int((len(wf) - tauS) / xiS) + 1}')
     # this is equivalent to int((len(wf) - tauS) / xiS) + 1
   
   # Initialize segmented waveform matrix
@@ -389,8 +391,11 @@ def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, N_phase_diffs_he
     else:
       # Same as above, except just use the current xiS rather than the max xiS
       N_phase_diffs = int((len(wf) - tauS - xiS) / seg_spacingS) + 1
-    sigmaS = get_sigmaS(fwhm=rho*xi, fs=fs)
-    f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=min_xi, win_type=("gaussian", sigmaS))
+    if rho is not None:
+      sigmaS = get_sigmaS(fwhm=rho*xi, fs=fs)
+      f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=min_xi, win_type=("gaussian", sigmaS))
+    else:
+      f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=min_xi)
     
     # initialize array for phase diffs
     phase_diffs = np.zeros((N_phase_diffs, N_bins))
