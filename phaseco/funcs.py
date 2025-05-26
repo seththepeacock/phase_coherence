@@ -366,53 +366,88 @@ def get_coherence(wf, fs, tau=None, tauS=None, xi=None, rho=None, win_type='boxc
     d["stft"] = stft
     return d
 
-def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, N_phase_diffs_held_const, global_max_xiS=None):
+def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_Npd=False, dense_stft=False, global_max_xi=None):
+  # Calculate xi array and N_bins
   num_xis = int((max_xi - min_xi) / delta_xi) + 1
   xis = np.linspace(min_xi, max_xi, num_xis)
-  min_xiS = min_xi * fs
-  max_xiS = max_xi * fs
-  seg_spacingS = min_xiS
-  if seg_spacingS != delta_xi*fs:
-    raise Exception("seg_spacingS(=min_xi) must be equal to delta_xiS or else our xi values won't correspond to referencing to an integer number of segs away!")
-  if global_max_xiS is None: # This is an option in case you want the number of averages to be constant across species (which have diff max_xiS)
-    global_max_xiS = max_xiS
-  
   N_bins = len(np.array(rfftfreq(tauS, 1/fs)))
-  
-  # Initialize output array
+  # Initizlize coherences array
   coherences = np.zeros((N_bins, len(xis)))
   
-  for i, xi in enumerate(tqdm(xis)):
-    xiS = xi * fs
-    # Get number of averages
-    if N_phase_diffs_held_const:
-      # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 in old case) ones won't have a reference.
-      N_phase_diffs = int((len(wf) - tauS - global_max_xiS) / seg_spacingS) + 1 
-    else:
-      # Same as above, except just use the current xiS rather than the max xiS
-      N_phase_diffs = int((len(wf) - tauS - xiS) / seg_spacingS) + 1
-    if rho is not None:
-      sigmaS = get_sigmaS(fwhm=rho*xi, fs=fs)
-      f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=min_xi, win_type=("gaussian", sigmaS))
-    else:
-      f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=min_xi)
+  # If we're going to hold the number of PDs constant, calculate this number
+  if const_Npd:
+    if global_max_xi is None: # This is an option in case you want the number of averages to be constant across species (which have diff max_xiS)
+      global_max_xi = max_xi # But otherwise, just use the max xi for this colossogram instance
+    global_max_xiS = global_max_xi * fs
     
-    # initialize array for phase diffs
-    phase_diffs = np.zeros((N_phase_diffs, N_bins))
-    
-    # get phases
-    phases=np.angle(stft)
-    
-    # calc phase diffs
-    for seg in range(N_phase_diffs):
-      # take the difference between the phases in this current window and the one xi away
-      # First, make sure this all makes sense
-      if int(xiS/seg_spacingS) - (xiS/seg_spacingS) > 1e-12:
-        raise Exception("xiS/seg_spacingS = " + str(xiS/seg_spacingS) + " -- this should be an integer!")
+  
+  
+  if dense_stft:
+    # Set the STFT seg_spacing according to the minimum xi in this colossogram
+    seg_spacing = min_xi
+    seg_spacingS = seg_spacing * fs
+    # Make sure delta_xi is equal to seg_spacing
+    if seg_spacingS != delta_xi*fs:
+        raise Exception("seg_spacing(=min_xi) must be equal to delta_xi or else our xi values won't correspond to referencing to an integer number of segs away!")
+    # Loop through xis
+    for i, xi in enumerate(tqdm(xis)):
+      xiS = xi * fs # Calculate current xi in samples
+      # Get window
+      win_type = 'boxcar' if rho is None else ("gaussian", get_sigmaS(fwhm=rho*xi, fs=fs))
+      # Get N_pd
+      if const_Npd:
+        # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 in old case) ones won't have a reference.
+        N_pd = int((len(wf) - tauS - global_max_xiS) / seg_spacingS) + 1 
+      else:
+        # Same as above, except just use the current xiS rather than the max xiS
+        N_pd = int((len(wf) - tauS - xiS) / seg_spacingS) + 1
+      # Get dense STFT (seg spacing according to minimum xi in this Colossogram)
+      f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=seg_spacing, win_type=win_type)
       
-      phase_diffs[seg] = phases[seg + int(xiS/seg_spacingS)] - phases[seg]
+      # initialize array for phase diffs
+      phase_diffs = np.zeros((N_pd, N_bins))
+      
+      # get phases
+      phases=np.angle(stft)
+      
+      # calc phase diffs
+      for seg in range(N_pd):
+        # take the difference between the phases in this current window and the one xi away
+        # First, make sure this all makes sense
+        if int(xiS/seg_spacingS) - (xiS/seg_spacingS) > 1e-12:
+          raise Exception("xiS/seg_spacingS = " + str(xiS/seg_spacingS) + " -- this should be an integer!")
+        phase_diffs[seg] = phases[seg + int(xiS/seg_spacingS)] - phases[seg]
+      
+      coherences[:, i] = get_avg_vector(phase_diffs)[0]
     
-    coherences[:, i] = get_avg_vector(phase_diffs)[0]
+  else: # This is the classic way, where:
+    seg_spacingS = xiS
+    # (note the number of PDs changes drastically from xi to xi, and if we make it constant, we have to clip very low if the max xi is large)
+    if const_Npd:
+      # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 here for the max xiS) ones won't have a reference.
+      N_pd = int((len(wf) - tauS - global_max_xiS) / seg_spacingS) + 1 
+      N_segs = N_pd + 1 
+    else: 
+      # If we're not holding it constant, we just fill er up with as many segs as can fit!
+      N_segs = None
+    for i, xi in enumerate(tqdm(xis)):
+      # Get coherence
+      coherences[:, i] = get_coherence(wf=wf, fs=fs, tauS=tauS, xi=xi, ref_type="next_seg", N_segs=N_segs, rho=rho)[1]
+      
+      # initialize array for phase diffs
+      phase_diffs = np.zeros((N_pd, N_bins))
+      
+      # get phases
+      phases=np.angle(stft)
+      
+      # calc phase diffs
+      for seg in range(N_pd):
+        phase_diffs[seg] = phases[seg + 1] - phases[seg] # Note xiS/seg_spacingS = 1 here
+      
+      coherences[:, i] = get_avg_vector(phase_diffs)[0]
+      
+    
+  
   return f, xis, coherences
   
 
