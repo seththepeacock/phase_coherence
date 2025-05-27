@@ -374,10 +374,11 @@ def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_Npd=False,
   # Initizlize coherences array
   coherences = np.zeros((N_bins, len(xis)))
   
-  # If we're going to hold the number of PDs constant, calculate this number
+  # If we're going to hold the number of PDs constant, set the max xi that will determine this number 
+  # (either max xi in htis colossogram or a global one so it's constant across all colossograms in comparison)
   if const_Npd:
-    if global_max_xi is None: # This is an option in case you want the number of averages to be constant across species (which have diff max_xiS)
-      global_max_xi = max_xi # But otherwise, just use the max xi for this colossogram instance
+    if global_max_xi is None:
+      global_max_xi = max_xi 
     global_max_xiS = global_max_xi * fs
     
   
@@ -396,13 +397,14 @@ def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_Npd=False,
       win_type = 'boxcar' if rho is None else ("gaussian", get_sigmaS(fwhm=rho*xi, fs=fs))
       # Get N_pd
       if const_Npd:
-        # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 in old case) ones won't have a reference.
-        N_pd = int((len(wf) - tauS - global_max_xiS) / seg_spacingS) + 1 
+        # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 in non-dense_stft-case) ones won't have a reference.
+        N_pd = int((len(wf) - tauS) / seg_spacingS) + 1 - int(global_max_xiS/seg_spacingS) 
       else:
         # Same as above, except just use the current xiS rather than the max xiS
-        N_pd = int((len(wf) - tauS - xiS) / seg_spacingS) + 1
+        N_pd = int((len(wf) - tauS) / seg_spacingS) + 1 - int(xiS/seg_spacingS)
       # Get dense STFT (seg spacing according to minimum xi in this Colossogram)
       f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, xi=seg_spacing, win_type=win_type)
+      
       
       # initialize array for phase diffs
       phase_diffs = np.zeros((N_pd, N_bins))
@@ -420,34 +422,21 @@ def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_Npd=False,
       
       coherences[:, i] = get_avg_vector(phase_diffs)[0]
     
-  else: # This is the classic way, where:
-    seg_spacingS = xiS
+  else: # This is the classic way, where seg_spacing = xi
     # (note the number of PDs changes drastically from xi to xi, and if we make it constant, we have to clip very low if the max xi is large)
     if const_Npd:
-      # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 here for the max xiS) ones won't have a reference.
-      N_pd = int((len(wf) - tauS - global_max_xiS) / seg_spacingS) + 1 
-      N_segs = N_pd + 1 
+      # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 here since xiS=seg_spacingS) ones won't have a reference.
+      # ... so there are int((len(wf)-tauS)/seg_spacingS) + 1 - 1 full tau segments (THAT HAVE A REFERENCE!)
+      # And since we're holding N_pd constant by finding the minimum it will ever be, we set seg_SpacingS = global_max_xiS
+      N_pd = int((len(wf) - tauS) / global_max_xiS) # Total number of PDs = number of full tau segments with a reference
+      N_segs = N_pd + 1 # but there's xiS/seg_spacingS = 1 extra segment since the last one needs a reference too
     else: 
       # If we're not holding it constant, we just fill er up with as many segs as can fit!
       N_segs = None
     for i, xi in enumerate(tqdm(xis)):
       # Get coherence
-      coherences[:, i] = get_coherence(wf=wf, fs=fs, tauS=tauS, xi=xi, ref_type="next_seg", N_segs=N_segs, rho=rho)[1]
+      f, coherences[:, i] = get_coherence(wf=wf, fs=fs, tauS=tauS, xi=xi, ref_type="next_seg", N_segs=N_segs, rho=rho)
       
-      # initialize array for phase diffs
-      phase_diffs = np.zeros((N_pd, N_bins))
-      
-      # get phases
-      phases=np.angle(stft)
-      
-      # calc phase diffs
-      for seg in range(N_pd):
-        phase_diffs[seg] = phases[seg + 1] - phases[seg] # Note xiS/seg_spacingS = 1 here
-      
-      coherences[:, i] = get_avg_vector(phase_diffs)[0]
-      
-    
-  
   return f, xis, coherences
   
 

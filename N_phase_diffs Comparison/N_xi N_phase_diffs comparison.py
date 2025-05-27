@@ -15,12 +15,13 @@ from tqdm import tqdm
 #     for wf_idx in [0, 1, 2, 3]:
 wf_idx = 0
 for rho in [0.6]:
-    for species in ['Human']:
+    for species in ['Anole']:
         for dense_stft in [True, False]:
             for const_N_phase_diffs in [True, False]:
                 if dense_stft and not const_N_phase_diffs:
                     continue
                 print("Dense STFT:", dense_stft, "N held const:", const_N_phase_diffs)
+
                 wf, wf_fn, fs, peak_freqs, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
                 print(f"Processing {wf_fn}")
                 
@@ -47,7 +48,7 @@ for rho in [0.6]:
                 plotting_colossogram = 1
                 plotting_peak_picks = 1
                 plotting_fits = 1
-                show_plots = 0
+                show_plots = 1
                 s_signal=1
                 s_noise=1
                 s_decayed = 100
@@ -229,6 +230,7 @@ for rho in [0.6]:
 
                     # Book it!
                     plt.tight_layout()
+                    fig_folder = rf'C:\Users\Owner\OneDrive\Desktop\fig old way'
                     os.makedirs(fig_folder, exist_ok=True)   
                     os.makedirs(f'{fig_folder}\Fits', exist_ok=True) 
                     plt.savefig(f'{fig_folder}\Fits\{fn_id} (Fits).png', dpi=300)

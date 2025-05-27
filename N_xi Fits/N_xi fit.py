@@ -10,15 +10,27 @@ import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 from tqdm import tqdm
 
-
-for species in ['Anole', 'Human', 'Owl']:
-    for wf_idx in [0]:
+for wf_idx in [0, 1, 2, 3]:
+    for species in ['Anole', 'Owl', 'Human']:
         for rho in [0.6]:
-            # for dense_stft, const_Npd in [(1, 1), (0, 0)]:
-            for dense_stft, const_Npd in [(0, 0)]:
-                    # print("Dense STFT:", dense_stft, "N held const:", const_Npd)
+# for wf_idx in [0]:
+#     for species in ['Anole']:
+#         for rho in [0.6]:
+            for dense_stft, const_Npd in [(0, 0), (0, 1), (1, 1)]:
+                    "Get waveform"
                     wf, wf_fn, fs, peak_freqs, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
                     print(f"Processing {wf_fn}")
+                    
+                    # Apply a high pass filter
+                    hpf_cutoff_freq = 300
+                    wf = spectral_filter(wf, fs, hpf_cutoff_freq, type='hp')
+                    
+                    # Crop to desired length
+                    if not dense_stft:
+                        wf_length = 60
+                    else:
+                        wf_length = 30
+                    wf = wf[:int(wf_length*fs)]
                     
                     "PARAMETERS"
                     # Coherence Parameters
@@ -29,6 +41,12 @@ for species in ['Anole', 'Human', 'Owl']:
                     min_xi = 0.001
                     force_recalc_coherences = 0
                     
+                    # Plotting options
+                    plotting_colossogram = 1
+                    plotting_peak_picks = 1
+                    plotting_fits = 1
+                    show_plots = 0
+                    
                     # Z-Test Parameters
                     sample_hw = 10
                     z_alpha = 0.05 # Minimum p-value for z-test; we assume noise unless p < z_alpha (so higher z_alpha means more signal bins)
@@ -38,12 +56,8 @@ for species in ['Anole', 'Human', 'Owl']:
                     trim_step = 10
                     A_max = np.inf # 1 or np.inf
                     sigma_weighting_power = 0 # > 0 means less weight on lower coherence bins in fit
-
+                    
                     # Plotting parameters
-                    plotting_colossogram = 1
-                    plotting_peak_picks = 1
-                    plotting_fits = 1
-                    show_plots = 1
                     s_signal=1
                     s_noise=1
                     s_decayed = 100
@@ -53,7 +67,6 @@ for species in ['Anole', 'Human', 'Owl']:
                     marker_decayed='*'
                     lw_fit = 1.5
                     alpha_fit = 1
-                    alpha_bad_fit = 0.2
                     pe_stroke_fit = [pe.Stroke(linewidth=2, foreground='black', alpha=1), pe.Normal()]  
                     edgecolor_signal=None
                     edgecolor_noise=None
@@ -63,9 +76,9 @@ for species in ['Anole', 'Human', 'Owl']:
                     
                     # Species specific params
                     max_xis = {
-                        'Anole': 0.3,
+                        'Anole': 0.2,
                         'Human': 1.0,
-                        'Owl': 0.1
+                        'Owl': 0.2
                     }
                     
                     max_khzs = {
@@ -75,16 +88,31 @@ for species in ['Anole', 'Human', 'Owl']:
                     }
                     
                     max_xi = max_xis[species]
-                    global_max_xi = max(max_xis.values())
+                    # global_max_xi = max(max_xis.values())
+                    global_max_xi = max_xi
                     max_khz = max_khzs[species]
                     
+                            
+                    
                     "Set filepaths"
-                    fn_id = rf"{species} {wf_idx}, rho={rho}, tau={tau*1000:.0f}ms, const_Npd={const_Npd}, dense_stft={dense_stft}, max_xi={max_xi}, {wf_fn.split('.')[0]})"
-                    suptitle = rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [const_Npd={const_Npd}]   [dense_stft={dense_stft}]"
+                    fn_id = rf"{species} {wf_idx}, const_Npd={const_Npd}, dense_stft={dense_stft}, rho={rho}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
+                    # Calclulate Npd if we're going to hold it constant
                     pkl_fn = f'{fn_id} (Coherences)'
                     N_xi_folder = r'N_xi Fits/'
                     pkl_folder = N_xi_folder + r'Coherences Pickles/'
-                    fig_folder = N_xi_folder + rf'Figures/'
+                    fig_folder = N_xi_folder + rf'Figures (rho={rho})/'
+                    if const_Npd:
+                        global_max_xiS = global_max_xi*fs
+                        if dense_stft:
+                            seg_spacingS = min_xi*fs
+                            # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 in non-dense_stft-case) ones won't have a reference.
+                            const_Npd = int((len(wf) - tauS) / seg_spacingS) + 1 - int(global_max_xiS/seg_spacingS) 
+                        else:
+                            # The minimum number (at the maximum xiS) of full tau-segments is int((len(wf)-tauS)/global_max_xiS)+1
+                            # ...but the last one won't have a reference, so take off the + 1
+                            const_Npd = int((len(wf) - tauS) / (global_max_xiS))
+                    suptitle = rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi}$]   [{wf_length}s WF]   [const_Npd={const_Npd}]   [dense_stft={dense_stft}]"
+                    
 
                     "Calculate things"
                     # Raise warning if tauS is not a power of two AND the samplerate is indeed 44100
@@ -98,26 +126,9 @@ for species in ['Anole', 'Human', 'Owl']:
                     else:
                         print(f"Calculating coherences for {fn_id}")
                         f, xis, coherences = get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_Npd=const_Npd, dense_stft=dense_stft, global_max_xi=global_max_xi)
-                        if dense_stft:
-                            f, xis, coherences = get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_Npd)
-                        else:
-                            num_xis = int((max_xi - min_xi) / delta_xi) + 1
-                            xis = np.linspace(min_xi, max_xi, num_xis)
-
-                            max_xiS = max(xis) * fs
-                            f = np.array(rfftfreq(tauS, 1/fs))
-                            # Make sure we have a consistent number of segments to take vector strength over since this will change with xi
-                            if const_Npd:
-                                N_segs = int((len(wf) - tauS) / max_xiS) + 1
-                            else:
-                                N_segs = None
-
-                            coherences = np.zeros((len(f), len(xis)))
-                            for i, xi in enumerate(tqdm(xis)):
-                                coherences[:, i] = get_coherence(wf=wf, fs=fs, tauS=tauS, xi=xi, ref_type="next_seg", N_segs=N_segs, rho=rho)[1]
-                            
                         with open(pkl_folder + pkl_fn + '.pkl', 'wb') as file:
                             pickle.dump((coherences, f, xis, tau, rho, wf_fn, species), file)
+                    
                     # Get peak bin indices
                     peak_idxs = np.argmin(np.abs(f[:, None] - peak_freqs[None, :]), axis=0) 
                     
@@ -135,6 +146,7 @@ for species in ['Anole', 'Human', 'Owl']:
                         plt.savefig(f'{fig_folder}\Colossograms\{fn_id} (Colossogram).png', dpi=300)
                         if show_plots:
                             plt.show()
+                            
                     if plotting_peak_picks:
                         print("Plotting Peak Picks")
                         target_xi = 0.02
