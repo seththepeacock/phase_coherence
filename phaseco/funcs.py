@@ -78,7 +78,8 @@ def tau_or_tauS(fs, tau, tauS):
       tauS = tau*fs
   else: 
     if tau is not None: # Here tauS is not None, and neither is tau...
-      raise ValueError("You gave both tau and tauS... which do we use?")
+      if tauS != tau*fs:
+        raise ValueError(f"You gave both tau={tau} and tauS={tauS}, and they're not equivalent... which do we use?")
     else:
       tau = tauS/fs
   return tau, int(tauS)
@@ -382,7 +383,10 @@ def get_coherence(wf, fs, tau=None, tauS=None, seg_spacing=None, xi=None, rho=No
       "stft_dict" : stft_dict
     }
 
-def get_colossogram_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_N_pd=False, dense_stft=False, global_max_xi=None):
+def get_colossogram_coherences(wf, fs, min_xi, max_xi, delta_xi, tau=None, tauS=None, rho=0.7, const_N_pd=False, dense_stft=False, global_max_xi=None, return_dict=False):
+  # Handle possibilities of tau and tauS
+  tau, tauS = tau_or_tauS(fs, tau, tauS)
+  
   # Calculate xi array and N_bins
   num_xis = int((max_xi - min_xi) / delta_xi) + 1
   xis = np.linspace(min_xi, max_xi, num_xis)
@@ -463,8 +467,11 @@ def get_colossogram_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, cons
     N_segs = N_pd + int(current_xi_in_num_segs)
     
     coherences[:, i] = get_coherence(wf=wf, fs=fs, tauS=tauS, xi=xi, seg_spacing=seg_spacing, rho=rho, N_segs=N_segs)
-      
-  return f, xis, coherences, (N_pd_min, N_pd_max)
+  
+  if return_dict:
+    return {"xis":xis,"f":f, "coherences":coherences, "tau":tau, "fs":fs, "N_pd_min":N_pd_min, "N_pd_max":N_pd_max}
+  else:
+    return xis, f, coherences
   
 
 def get_asym_coherence(wf, fs, tauS, xi, fwhm=None, rho=None, N_segs=None):

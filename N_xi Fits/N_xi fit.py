@@ -99,7 +99,7 @@ for wf_idx in [0]:
                             
                     
                     "Set filepaths"
-                    fn_id = rf"{species} {wf_idx}, const_N_pd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
+                    fn_id = rf"{species} {wf_idx}, const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
                     # Calclulate Npd if we're going to hold it constant
                     pkl_fn = f'{fn_id} (Coherences)'
                     N_xi_folder = r'N_xi Fits/'
@@ -117,7 +117,13 @@ for wf_idx in [0]:
                             coherences, f, xis, tau, rho, wf_fn, species = pickle.load(file)
                     else:
                         print(f"Calculating coherences for {fn_id}")
-                        f, xis, coherences, (N_pd_min, N_pd_max) = get_colossogram_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_N_pd=const_N_pd, dense_stft=dense_stft, global_max_xi=global_max_xi)
+                        coherences_dict = get_colossogram_coherences(wf, fs, min_xi, max_xi, delta_xi, tauS=tauS, rho=rho, const_N_pd=const_N_pd, dense_stft=dense_stft, global_max_xi=global_max_xi)
+                        coherences = coherences_dict['coherences']
+                        f = coherences_dict['f']
+                        xis = coherences_dict['xis']    
+                        N_pd_min = coherences_dict['N_pd_min']
+                        N_pd_max = coherences_dict['N_pd_max']
+                        
                         with open(pkl_folder + pkl_fn + '.pkl', 'wb') as file:
                             pickle.dump((coherences, f, xis, tau, rho, wf_fn, species), file)
                     
@@ -127,7 +133,13 @@ for wf_idx in [0]:
                     
                     
                     "Plots"
-                    suptitle = rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi}$]   [{wf_length}s WF]   [$N_{{pd}} \in [{N_pd_min}, {N_pd_max}]$]   [dense_stft={dense_stft}]"
+                    if const_N_pd:
+                        if N_pd_min != N_pd_max:
+                            raise Exception("If N_pd is constant, then N_pd_min and N_pd_max should be equal...")
+                        N_pd_str = f"$N_{{pd}}={N_pd_min}$"
+                    else:
+                        N_pd_str = f"$N_{{pd}} \in [{N_pd_min}, {N_pd_max}]$"
+                    suptitle = rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi}$]   [{wf_length}s WF]   [{N_pd_str}]   [dense_stft={dense_stft}]"
                     if plotting_colossogram:
                         print("Plotting Colossogram")
                         plt.close('all')
