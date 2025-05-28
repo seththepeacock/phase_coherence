@@ -84,9 +84,6 @@ def tau_or_tauS(fs, tau, tauS):
   return tau, int(tauS)
 
 
-def check_xi_in_num_segs(xi_in_num_segs, name):
-  if int(xi_in_num_segs) - xi_in_num_segs > 1e-12:
-      raise Exception(f"{name} should be an integer - change your xis or your seg_spacing!")
 
 """
 PRIMARY FUNCTIONS
@@ -291,7 +288,7 @@ def get_coherence(wf, fs, tau=None, tauS=None, seg_spacing=None, xi=None, rho=No
   # we can reference each phase against the phase of the same frequency in the next window:
   if ref_type == "next_seg":
     # Make sure we can reference this xi in this STFT; xi should be an integer number of segs away
-    xi_in_num_segs = xi/seg_spacing # Note that in classic case, xi=seg_spacing and this is just 1!
+    xi_in_num_segs = xi/seg_spacing
     if int(xi_in_num_segs) - (xi_in_num_segs) > 1e-12:
           raise Exception(f"This xi corresponds to going {xi_in_num_segs} segs away, needs to be an integer! Change xi={xi} or seg_spacing={seg_spacing}.")
     
@@ -382,89 +379,79 @@ def get_coherence(wf, fs, tau=None, tauS=None, seg_spacing=None, xi=None, rho=No
       "stft_dict" : stft_dict
     }
 
-def get_colossogram_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_N_pd=False, dense_stft=False, global_max_xi=None):
+def get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_Npd=False, dense_stft=False, global_max_xi=None):
   # Calculate xi array and N_bins
   num_xis = int((max_xi - min_xi) / delta_xi) + 1
   xis = np.linspace(min_xi, max_xi, num_xis)
-  f = np.array(rfftfreq(tauS, 1/fs))
-  N_bins = len(f)
+  N_bins = len(np.array(rfftfreq(tauS, 1/fs)))
   # Initialize coherences array
   coherences = np.zeros((N_bins, len(xis)))
   
+  # If we're going to hold the number of PDs constant, set the max xi that will determine this number 
+  # (either max xi in htis colossogram or a global one so it's constant across all colossograms in comparison)
+  if const_Npd:
+    if global_max_xi is None:
+      global_max_xi = max_xi 
+    global_max_xiS = global_max_xi * fs
+    
+  
+
   if dense_stft:
     # Set the STFT seg_spacing according to the minimum xi in this colossogram
     seg_spacing = min_xi
     seg_spacingS = seg_spacing * fs
-    
     # Make sure all xis correspond to an integer*seg_spacing; since seg_spacing=min_xi, this is equivalent to making sure seg_spacing=delta_xi
     if seg_spacing != delta_xi:
         raise Exception("seg_spacing(=min_xi) must be equal to delta_xi or else our xi values won't correspond to referencing to an integer number of segs away!")
     
-  "Get the minimum N_pd"
-  # Set the max xi that will determine this minimum number of phase diffs
-  # (either max xi within this colossogram, or a global one so it's constant across all colossograms in comparison)
-  if global_max_xi is None:
-    global_max_xi = max_xi 
-  elif not const_N_pd:
-    raise Exception("Why did you pass a global max xi if you're not holding N_pd constant?")
-  global_max_xiS = global_max_xi * fs
-    
-
-  # Calculate the maxmium/minimum seg_spacing which will determine the minimum/maximum N_pd
-  if dense_stft:
-    # There's only one seg spacing in this case!
-    max_seg_spacing = seg_spacing 
-    min_seg_spacing = seg_spacing
-  else:
-    # seg_spacing=xi, but we know that the minimum N_pd is going to be when seg_spacing is maximum so:
-    max_seg_spacing = global_max_xi
-    min_seg_spacing = min_xi
-  
-  # Convert to # samples
-  max_seg_spacingS = max_seg_spacing * fs
-  min_seg_spacingS = min_seg_spacing * fs
-  
-  # Get the number of segments we have to shift to go global_max_xi seconds over in both the minimal/maximal N_pd cases
-  global_max_xi_in_num_segs = global_max_xiS / max_seg_spacingS 
-  check_xi_in_num_segs(global_max_xi_in_num_segs, "global_max_xi_in_num_segs")
-  min_xiS = min_xi * fs
-  min_xi_in_num_segs = min_xiS / min_seg_spacingS
-  check_xi_in_num_segs(min_xi_in_num_segs, "min_xi_in_num_segs")
-  
-  # Get the number of phase diffs (we can do this outside xi loop since it's constant)
-  # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. 
-  # But the last global_max_xi_in_num_segs (=1 in non-dense_stft-case, since global_max_xi=max_seg_spacing) ones won't have a reference.
-  N_pd_min = int((len(wf) - tauS) / max_seg_spacingS) + 1 - global_max_xi_in_num_segs
-  N_pd_max = int((len(wf) - tauS) / min_seg_spacingS) + 1 - min_xi_in_num_segs
-  
-  # If we're holding it constant, we hold it to the minimum
-  if const_N_pd:
-    N_pd = N_pd_min
-  
-    
-  # Loop through xis
-  for i, xi in enumerate(tqdm(xis)):
-    # Set seg_spacing if not already done above
-    if not dense_stft:
-      seg_spacing = xi
-      seg_spacingS = seg_spacing * fs
+    # Loop through xis
+    for i, xi in enumerate(tqdm(xis)):
+      xiS = xi * fs # Calculate current xi in samples
+      # Get window
+      win_type = 'boxcar' if rho is None else ("gaussian", get_sigmaS(fwhm=rho*xi, fs=fs))
+      # Get N_pd
+      if const_Npd:
+        # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 in non-dense_stft-case) ones won't have a reference.
+        N_pd = int((len(wf) - tauS) / seg_spacingS) + 1 - int(global_max_xiS/seg_spacingS) 
+      else:
+        # Same as above, except just use the current xiS rather than the max xiS
+        N_pd = int((len(wf) - tauS) / seg_spacingS) + 1 - int(xiS/seg_spacingS)
+      # Get dense STFT (seg spacing according to minimum xi in this Colossogram)
+      f, stft = get_stft(wf=wf, fs=fs, tauS=tauS, seg_spacing=seg_spacing, win_type=win_type)
       
-    # Get current xi in terms of number of segments
-    current_xi_in_num_segs = xi / seg_spacing
-    check_xi_in_num_segs(current_xi_in_num_segs, f"current_xi_in_num_segs for xi={xi}")
       
-    # Calculate N_pd if not already done already
-    if not const_N_pd:
-      # This is just as many segments as we possibly can
-      # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments, but the last current_xi_in_num_segs ones won't have a reference
-      N_pd = int((len(wf) - tauS) / seg_spacingS) + 1 - int(current_xi_in_num_segs)
-
-    # Get N_segs; We only need as many segments as there are PDs, plus the last one needs to be able to reference
-    N_segs = N_pd + int(current_xi_in_num_segs)
+      # initialize array for phase diffs
+      phase_diffs = np.zeros((N_pd, N_bins))
+      
+      # get phases
+      phases=np.angle(stft)
+      
+      # calc phase diffs
+      for seg in range(N_pd):
+        # take the difference between the phases in this current window and the one xi away
+        # First, make sure this all makes sense
+        if int(xiS/seg_spacingS) - (xiS/seg_spacingS) > 1e-12:
+          raise Exception("xiS/seg_spacingS = " + str(xiS/seg_spacingS) + " -- this should be an integer!")
+        phase_diffs[seg] = phases[seg + int(xiS/seg_spacingS)] - phases[seg]
+      
+      coherences[:, i] = get_avg_vector(phase_diffs)[0]
     
-    coherences[:, i] = get_coherence(wf=wf, fs=fs, tauS=tauS, xi=xi, seg_spacing=seg_spacing, rho=rho, N_segs=N_segs)
+  else: # This is the classic way, where seg_spacing = xi
+    # (note the number of PDs changes drastically from xi to xi, and if we make it constant, we have to clip very low if the max xi is large)
+    if const_Npd:
+      # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 here since xiS=seg_spacingS) ones won't have a reference.
+      # ... so there are int((len(wf)-tauS)/seg_spacingS) + 1 - 1 full tau segments (THAT HAVE A REFERENCE!)
+      # And since we're holding N_pd constant by finding the minimum it will ever be, we set seg_SpacingS = global_max_xiS
+      N_pd = int((len(wf) - tauS) / global_max_xiS) # Total number of PDs = number of full tau segments with a reference
+      N_segs = N_pd + 1 # but there's xiS/seg_spacingS = 1 extra segment since the last one needs a reference too
+    else: 
+      # If we're not holding it constant, we just fill er up with as many segs as can fit!
+      N_segs = None
+    for i, xi in enumerate(tqdm(xis)):
+      # Get coherence
+      f, coherences[:, i] = get_coherence(wf=wf, fs=fs, tauS=tauS, xi=xi, ref_type="next_seg", N_segs=N_segs, rho=rho)
       
-  return f, xis, coherences, (N_pd_min, N_pd_max)
+  return f, xis, coherences, const_Npd
   
 
 def get_asym_coherence(wf, fs, tauS, xi, fwhm=None, rho=None, N_segs=None):

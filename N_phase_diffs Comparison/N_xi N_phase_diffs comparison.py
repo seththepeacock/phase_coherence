@@ -110,7 +110,7 @@ for rho in [0.6]:
                 else:
                     print(f"Calculating coherences for {wf_fn} with rho={rho}")
                     if dense_stft:
-                        f, xis, coherences = get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_N_phase_diffs)
+                        f, xis, coherences = get_colossogram_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_N_phase_diffs)
                     else:
                         num_xis = int((max_xi - min_xi) / delta_xi) + 1
                         xis = np.linspace(min_xi, max_xi, num_xis)

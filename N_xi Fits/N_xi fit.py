@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 from tqdm import tqdm
 
-for wf_idx in [0, 1, 2, 3]:
-    for species in ['Anole', 'Human', 'Owl']:
-        for rho in [0.7]:
-            for dense_stft, const_Npd in [(0, 0)]:
+for wf_idx in [0]:
+    for species in ['Anole']:
+        for rho in [0.6]:
+            for dense_stft, const_N_pd in [(0, 0), (1, 0)]:
                     # if rho != 0.6 and (wf_idx, species) != (1, 'Anole'):
                     #     continue
                     "Get waveform"
@@ -38,7 +38,7 @@ for wf_idx in [0, 1, 2, 3]:
                     tauS = int(tau*fs)
                     delta_xi = 0.001
                     min_xi = 0.001
-                    force_recalc_coherences = 0
+                    force_recalc_coherences = 1
                     
                     # Plotting options
                     plotting_colossogram = 1
@@ -86,32 +86,25 @@ for wf_idx in [0, 1, 2, 3]:
                         'Owl': 12
                     }
                     
-                    max_xi = max_xis[species]
-                    # global_max_xi = max(max_xis.values())
-                    global_max_xi = max_xi
                     max_khz = max_khzs[species]
+                    max_xi = max_xis[species]
+                    if const_N_pd:
+                        global_max_xi = max_xi
+                        # global_max_xi = max(max_xis.values())
+                    else:
+                        global_max_xi = None
+                    
+                    
                     
                             
                     
                     "Set filepaths"
-                    fn_id = rf"{species} {wf_idx}, const_Npd={const_Npd}, dense_stft={dense_stft}, rho={rho}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
+                    fn_id = rf"{species} {wf_idx}, const_N_pd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
                     # Calclulate Npd if we're going to hold it constant
                     pkl_fn = f'{fn_id} (Coherences)'
                     N_xi_folder = r'N_xi Fits/'
                     pkl_folder = N_xi_folder + r'Coherences Pickles/'
                     fig_folder = N_xi_folder + rf'Figures (rho={rho})/'
-                    if const_Npd:
-                        global_max_xiS = global_max_xi*fs
-                        if dense_stft:
-                            seg_spacingS = min_xi*fs
-                            # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 in non-dense_stft-case) ones won't have a reference.
-                            const_Npd = int((len(wf) - tauS) / seg_spacingS) + 1 - int(global_max_xiS/seg_spacingS) 
-                        else:
-                            # The minimum number (at the maximum xiS) of full tau-segments is int((len(wf)-tauS)/global_max_xiS)+1
-                            # ...but the last one won't have a reference, so take off the + 1
-                            const_Npd = int((len(wf) - tauS) / (global_max_xiS))
-                    suptitle = rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi}$]   [{wf_length}s WF]   [const_Npd={const_Npd}]   [dense_stft={dense_stft}]"
-                    
 
                     "Calculate things"
                     # Raise warning if tauS is not a power of two AND the samplerate is indeed 44100
@@ -124,14 +117,17 @@ for wf_idx in [0, 1, 2, 3]:
                             coherences, f, xis, tau, rho, wf_fn, species = pickle.load(file)
                     else:
                         print(f"Calculating coherences for {fn_id}")
-                        f, xis, coherences = get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_Npd=const_Npd, dense_stft=dense_stft, global_max_xi=global_max_xi)
+                        f, xis, coherences, (N_pd_min, N_pd_max) = get_colossogram_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_N_pd=const_N_pd, dense_stft=dense_stft, global_max_xi=global_max_xi)
                         with open(pkl_folder + pkl_fn + '.pkl', 'wb') as file:
                             pickle.dump((coherences, f, xis, tau, rho, wf_fn, species), file)
                     
                     # Get peak bin indices
                     peak_idxs = np.argmin(np.abs(f[:, None] - peak_freqs[None, :]), axis=0) 
                     
-                    "Preliminary Plots"
+                    
+                    
+                    "Plots"
+                    suptitle = rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi}$]   [{wf_length}s WF]   [$N_{{pd}} \in [{N_pd_min}, {N_pd_max}]$]   [dense_stft={dense_stft}]"
                     if plotting_colossogram:
                         print("Plotting Colossogram")
                         plt.close('all')

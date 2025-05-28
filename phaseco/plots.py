@@ -80,7 +80,7 @@ def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scal
   if xi is None:
     xi = tau
   # get stft so we don't have to do it twice below
-  d = get_stft(wf=wf, sr=sr, tau=tau, xi=xi, num_segs=num_segs, win_type=win_type)
+  d = get_stft(wf=wf, sr=sr, tau=tau, seg_spacing=xi, num_segs=num_segs, win_type=win_type)
   stft = d["stft"]
   # we'll want to pass this through the subsequent functions as well to maintain correspondence through all the shifts
   freq_ax = d["freq_ax"]
@@ -219,7 +219,7 @@ def spectrogram(wf, sr, tau, xi=None, num_segs=None, db=True, fftshift_segs=Fals
       fig_num: int, Optional
   """
   # calculate the segmented fft, which outputs three arrays we will use
-  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, fftshift_segs=fftshift_segs, tau=tau, xi=xi)
+  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, fftshift_segs=fftshift_segs, tau=tau, seg_spacing=xi)
   # this is the segmented fft itself
   stft = stft_output["stft"]
   # this is the frequency axis
@@ -319,7 +319,7 @@ def coherogram(wf, sr, tau, xi, scope=2, freq_ref_step=1, ref_type="next_win", n
   """
 
   # calculate the segmented fft, which outputs three arrays we will use
-  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, tau=tau, xi=xi, fftshift_segs=fftshift_segs)
+  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, tau=tau, seg_spacing=xi, fftshift_segs=fftshift_segs)
   # this is the segmented fft itself
   stft = stft_output["stft"]
   # this is the frequency axis

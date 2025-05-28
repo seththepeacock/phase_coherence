@@ -17,13 +17,13 @@ tau = 0.05
 xi = tau # For this example, tau and xi are the same (C_tau)
 
 # Get STFT
-f, stft = get_stft(wf, sr, tau=tau, xi=xi)
+f, stft = get_stft(wf, sr, tau=tau, seg_spacing=xi)
 
 # Get coherence, passing in STFT
 f, C_tau = get_coherence(wf, sr, tau=tau, xi=xi, ref_type="next_seg", reuse_stft=(f, stft))
 
 # Now let's get the magnitude spectrum - still reusing the STFT from before!
-f, mag_spec = get_welch(wf, sr, tau=tau, xi=xi, scaling='mags', reuse_stft=(f, stft)) 
+f, mag_spec = get_welch(wf, sr, tau=tau, seg_spacing=xi, scaling='mags', reuse_stft=(f, stft)) 
 
 # And C_theta; note ref_type can be "next_freq" or "both_freqs" for referencing to either side - I think Chris' code does the latter so we'll use that
 # Either way, frequency axis is slightly modified so we'll redefine f (both_freqs loses the first and last bin)
