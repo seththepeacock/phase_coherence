@@ -11,12 +11,11 @@ import matplotlib.patheffects as pe
 from tqdm import tqdm
 
 for wf_idx in [0, 1, 2, 3]:
-    for species in ['Anole', 'Owl', 'Human']:
-        for rho in [0.6]:
-# for wf_idx in [0]:
-#     for species in ['Anole']:
-#         for rho in [0.6]:
-            for dense_stft, const_Npd in [(0, 0), (0, 1), (1, 1)]:
+    for species in ['Anole', 'Human', 'Owl']:
+        for rho in [0.7]:
+            for dense_stft, const_Npd in [(0, 0)]:
+                    # if rho != 0.6 and (wf_idx, species) != (1, 'Anole'):
+                    #     continue
                     "Get waveform"
                     wf, wf_fn, fs, peak_freqs, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
                     print(f"Processing {wf_fn}")
@@ -43,10 +42,10 @@ for wf_idx in [0, 1, 2, 3]:
                     
                     # Plotting options
                     plotting_colossogram = 1
-                    plotting_peak_picks = 1
-                    plotting_fits = 1
+                    plotting_peak_picks = 0
+                    plotting_fits = 0
                     show_plots = 0
-                    
+                 
                     # Z-Test Parameters
                     sample_hw = 10
                     z_alpha = 0.05 # Minimum p-value for z-test; we assume noise unless p < z_alpha (so higher z_alpha means more signal bins)
@@ -149,7 +148,7 @@ for wf_idx in [0, 1, 2, 3]:
                             
                     if plotting_peak_picks:
                         print("Plotting Peak Picks")
-                        target_xi = 0.02
+                        target_xi = 0.01
                         xi_idx = np.argmin(np.abs(xis - target_xi))
                         coherence_slice = coherences[:, xi_idx]
                         psd = get_welch(wf=wf, fs=fs, tauS=tauS)[1]
