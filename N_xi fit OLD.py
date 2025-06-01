@@ -4,21 +4,22 @@ import pickle
 import os
 from scipy.fft import rfft, rfftfreq
 from scipy.optimize import curve_fit
-import phaseco as pc
-from phaseco import *
+from funcs_OLD import *
+from phaseco import plot_colossogram
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 from tqdm import tqdm
-from collections import defaultdict
 
 for wf_idx in [1]:
     for species in ['Anole']:
         for rho in [0.6]:
+# for wf_idx in [0]:
+#     for species in ['Anole']:
+#         for rho in [0.6]:
             for dense_stft, const_N_pd in [(1, 1)]:
-                    print(f"Processing {species} {wf_idx}")
-                    
                     "Get waveform"
                     wf, wf_fn, fs, peak_freqs, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
+                    print(f"Processing {wf_fn}")
                     
                     # Apply a high pass filter
                     hpf_cutoff_freq = 300
@@ -29,35 +30,30 @@ for wf_idx in [1]:
                         wf_length = 60
                     else:
                         wf_length = 30
-                    
-                    
                     wf = wf[:int(wf_length*fs)]
                     
                     "PARAMETERS"
                     # Coherence Parameters
                     # rho = None
-                    snapping_rhortle = 0
                     tau = 2**13 / 44100 # Everyone uses the same tau
                     tauS = int(tau*fs)
+                    delta_xi = 0.001
                     min_xi = 0.001
-                    delta_xi = min_xi
-                    skip_min_xi = True if (dense_stft, const_N_pd) == (0, 0) else False
                     force_recalc_coherences = 1
-                    
                     
                     # Plotting options
                     plotting_colossogram = 1
                     plotting_peak_picks = 0
                     plotting_fits = 0
                     show_plots = 1
-                 
+                    
                     # Z-Test Parameters
                     sample_hw = 10
                     z_alpha = 0.05 # Minimum p-value for z-test; we assume noise unless p < z_alpha (so higher z_alpha means more signal bins)
 
                     # Fitting Parameters
                     min_fit_xi_idx = 1
-                    trim_step = 1
+                    trim_step = 10
                     A_max = np.inf # 1 or np.inf
                     sigma_weighting_power = 0 # > 0 means less weight on lower coherence bins in fit
                     
@@ -80,11 +76,10 @@ for wf_idx in [1]:
                     
                     # Species specific params
                     max_xis = {
-                        'Anole': 0.2,
+                        'Anole': 0.005,
                         'Human': 1.0,
                         'Owl': 0.2
                     }
-                    
                     
                     max_khzs = {
                         'Anole': 6,
@@ -92,22 +87,33 @@ for wf_idx in [1]:
                         'Owl': 12
                     }
                     
-                    max_khz = max_khzs[species]
                     max_xi = max_xis[species]
-                    if const_N_pd:
-                        # TEST
-                        global_max_xi = max_xi
-                        # global_max_xi = max(max_xis.values())
-                    else:
-                        global_max_xi = None
+                    # global_max_xi = max(max_xis.values())
+                    global_max_xi = max_xi
+                    max_khz = max_khzs[species]
+                    
+    
+                            
                     
                     "Set filepaths"
-                    fn_id = rf"{species} {wf_idx}, const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
+                    fn_id = rf"{species} {wf_idx}, const_N_pd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
                     # Calclulate Npd if we're going to hold it constant
                     pkl_fn = f'{fn_id} (Coherences)'
-                    N_xi_folder = r'N_xi Fits/'
+                    N_xi_folder = r'N_xi Fits TEST/'
                     pkl_folder = N_xi_folder + r'Coherences Pickles/'
                     fig_folder = N_xi_folder + rf'Figures (rho={rho})/'
+                    if const_N_pd:
+                        global_max_xiS = global_max_xi*fs
+                        if dense_stft:
+                            seg_spacingS = min_xi*fs
+                            # There are int((len(wf)-tauS)/seg_spacingS)+1 full tau-segments. But the last xiS/seg_spacingS (=1 in non-dense_stft-case) ones won't have a reference.
+                            const_N_pd = int((len(wf) - tauS) / seg_spacingS) + 1 - int(global_max_xiS/seg_spacingS) 
+                        else:
+                            # The minimum number (at the maximum xiS) of full tau-segments is int((len(wf)-tauS)/global_max_xiS)+1
+                            # ...but the last one won't have a reference, so take off the + 1
+                            const_N_pd = int((len(wf) - tauS) / (global_max_xiS))
+                    suptitle = rf"[{wf_fn}]   [$\rho$={rho}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi}$]   [{wf_length}s WF]   [const_N_pd={const_N_pd}]   [dense_stft={dense_stft}]"
+                    
 
                     "Calculate things"
                     # Raise warning if tauS is not a power of two AND the samplerate is indeed 44100
@@ -117,49 +123,18 @@ for wf_idx in [1]:
                     os.makedirs(pkl_folder, exist_ok=True)
                     if os.path.exists(pkl_folder + pkl_fn + '.pkl') and not force_recalc_coherences:
                         with open(pkl_folder + pkl_fn + '.pkl', 'rb') as file:
-                            # coherences, f, xis, tau, rho, wf_fn, species = pickle.load(file)
-                            # N_pd_min=0
-                            # N_pd_max=0
-                            # seg_spacing=0
-                            # snapping_rhortle=0
-                            coherences, f, xis, tau, rho, N_pd_min, N_pd_max, seg_spacing, snapping_rhortle, wf_fn, species = pickle.load(file)
+                            coherences, f, xis, tau, rho, wf_fn, species = pickle.load(file)
                     else:
                         print(f"Calculating coherences for {fn_id}")
-                        coherences_dict = get_colossogram_coherences(wf, fs, min_xi, max_xi, delta_xi, tauS=tauS, rho=rho, const_N_pd=const_N_pd, snapping_rhortle=snapping_rhortle, dense_stft=dense_stft, global_max_xi=global_max_xi, skip_min_xi=skip_min_xi, return_dict=True)
-                        coherences = coherences_dict['coherences']
-                        f = coherences_dict['f']
-                        xis = coherences_dict['xis']    
-                        N_pd_min = coherences_dict['N_pd_min']
-                        N_pd_max = coherences_dict['N_pd_max']
-                        seg_spacing = coherences_dict['seg_spacing']
-                        snapping_rhortle = coherences_dict['snapping_rhortle']
-                        
+                        f, xis, coherences = get_coherences(wf, fs, tauS, min_xi, max_xi, delta_xi, rho, const_N_pd=const_N_pd, dense_stft=dense_stft, global_max_xi=global_max_xi)
+                        # f, xis, coherences = get_colossogram_coherences(wf, fs, min_xi, max_xi, delta_xi, tauS=tauS, rho=rho, const_N_pd=const_N_pd, dense_stft=dense_stft, global_max_xi=global_max_xi)
                         with open(pkl_folder + pkl_fn + '.pkl', 'wb') as file:
-                            # pickle.dump((coherences, f, xis, tau, rho, wf_fn, species), file)
-                            pickle.dump((coherences, f, xis, tau, rho, N_pd_min, N_pd_max, seg_spacing, snapping_rhortle, wf_fn, species), file)
+                            pickle.dump((coherences, f, xis, tau, rho, wf_fn, species), file)
                     
                     # Get peak bin indices
                     peak_idxs = np.argmin(np.abs(f[:, None] - peak_freqs[None, :]), axis=0) 
                     
-                    # Temporary hack
-                    if skip_min_xi and coherences.shape[1] == xis.shape[0] + 1:
-                        coherences = coherences[:, 1:]
-                    
-                    "Plots"
-                    if const_N_pd:
-                        if N_pd_min != N_pd_max:
-                            raise Exception("If N_pd is constant, then N_pd_min and N_pd_max should be equal...")
-                        N_pd_str = f"$N_{{pd}}={N_pd_min}$"
-                    else:
-                        N_pd_str = f"$N_{{pd}} \in [{N_pd_min}, {N_pd_max}]$"
-                    if snapping_rhortle:
-                        rho_str = rf"$\rho={rho}$ - Snapping Rhortle"
-                    else:
-                        rho_str = rf"$\rho={rho}$"
-                    suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{rho_str}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi}$]   [{wf_length}s WF]   [{N_pd_str}]"
-                    if dense_stft:
-                        suptitle += f'   [STFT Spacing={seg_spacing*1000}ms]'
-                    
+                    "Preliminary Plots"
                     if plotting_colossogram:
                         print("Plotting Colossogram")
                         plt.close('all')
@@ -167,7 +142,7 @@ for wf_idx in [1]:
                         plot_colossogram(coherences, f, xis, tau, max_khz=max_khz, cmap='magma')
                         for peak_idx in peak_idxs:
                             plt.scatter(min_xi*1000 + (max_xi*1000)/50, f[peak_idx] / 1000, c='w', marker='>', label="Peak at " + f"{f[peak_idx]:0f}Hz", alpha=0.5)
-                        plt.title(f"Colossogram - {species} {wf_idx}", fontsize=18)
+                        plt.title(f"{species} Colossogram", fontsize=18)
                         plt.suptitle(suptitle, fontsize=10)
                         os.makedirs(f'{fig_folder}\Colossograms', exist_ok=True)
                         plt.savefig(f'{fig_folder}\Colossograms\{fn_id} (Colossogram).png', dpi=300)
@@ -176,7 +151,7 @@ for wf_idx in [1]:
                             
                     if plotting_peak_picks:
                         print("Plotting Peak Picks")
-                        target_xi = 0.01
+                        target_xi = 0.02
                         xi_idx = np.argmin(np.abs(xis - target_xi))
                         coherence_slice = coherences[:, xi_idx]
                         psd = get_welch(wf=wf, fs=fs, tauS=tauS)[1]
@@ -185,7 +160,7 @@ for wf_idx in [1]:
                         plt.suptitle(suptitle)
                         # Coherence slice plot
                         plt.subplot(2, 1, 1)
-                        plt.title(rf"Colossogram Slice at $\xi={xis[xi_idx]:.3f} - {species} {wf_idx}$")
+                        plt.title(rf"{species} Colossogram Slice at $\xi={xis[xi_idx]:.3f}$")
                         plt.plot(f / 1000, coherence_slice, label=r'$C_{\xi}$, $\xi={target_xi}$')
                         for peak_idx in peak_idxs:
                             plt.scatter(f[peak_idx] / 1000, coherence_slice[peak_idx], c='r')
@@ -194,7 +169,7 @@ for wf_idx in [1]:
                         plt.xlim(0, max_khz)
                         # PSD plot
                         plt.subplot(2, 1, 2)
-                        plt.title(rf"{species} {wf_idx} PSD - {species} {wf_idx}")
+                        plt.title(rf"{species} PSD")
                         plt.plot(f / 1000, 10*np.log10(psd), label='PSD')
                         for peak_idx in peak_idxs:
                             plt.scatter(f[peak_idx] / 1000, 10*np.log10(psd[peak_idx]), c='r')
@@ -209,7 +184,7 @@ for wf_idx in [1]:
                             plt.show()
                         
                     "FITTING"
-                    rows = [] # Initialize list for row dicts for xlsx file
+                    row = {} # Initialize row dict for xlsx file
                     if plotting_fits:
                         print(f"Fitting {wf_fn}")
                         p0 = [1, 1]
@@ -221,17 +196,13 @@ for wf_idx in [1]:
                         plt.suptitle(suptitle)
 
                         for peak_idx, color, subplot_idx in zip(peak_idxs, colors, [1, 2, 3, 4]):
-                            # Pack all parameters for fit_peak together into a tuple for compactness
-                            peak_fit_params = f, peak_idx, sample_hw, z_alpha, min_fit_xi_idx, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
                             # Fit peak
-                            tc, tc_std, A, A_std, freq, is_signal, is_noise, decayed_idx, target_coherence, x, x_fitted, y_fitted = fit_peak(*peak_fit_params)
-                            # Get MSE
+                            fit_peak_params = f, peak_idx, sample_hw, z_alpha, min_fit_xi_idx, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
+                            tc, A, freq, is_signal, is_noise, decayed_idx, xis_plot, target_coherences_plot, x, x_fitted, y_fitted = fit_peak(*fit_peak_params)
                             
-                            # Add params to a row dict
-                            row = {
-                                'T_std':tc_std
-                            }
+                            # Get chi square
                             
+                            # Add params to row dict
                             
                             # Plot this peak
                             tc_label = rf"{tc*freq:.0f} \text{{ Cycles}}"
@@ -239,11 +210,11 @@ for wf_idx in [1]:
                             fit_label = rf"{freq:.0f}Hz ($T={tc_label}$, $A={A:.2f}$)"
 
                             
-                            plt.scatter(x[is_signal], target_coherence[is_signal], s=s_signal, edgecolors=edgecolor_signal, marker=marker_signal, color=color, zorder=1)
-                            plt.scatter(x[is_noise], target_coherence[is_noise], s=s_noise, color=color, edgecolors=edgecolor_noise, zorder=1)
+                            plt.scatter(x[is_signal], target_coherences_plot[is_signal], s=s_signal, edgecolors=edgecolor_signal, marker=marker_signal, color=color, zorder=1)
+                            plt.scatter(x[is_noise], target_coherences_plot[is_noise], s=s_noise, color=color, edgecolors=edgecolor_noise, zorder=1)
 
                             # Mark decayed point
-                            plt.scatter(x[decayed_idx], target_coherence[decayed_idx], s=s_decayed, marker=marker_decayed, color=color, edgecolors=edgecolor_decayed, zorder=3)
+                            plt.scatter(x[decayed_idx], target_coherences_plot[decayed_idx], s=s_decayed, marker=marker_decayed, color=color, edgecolors=edgecolor_decayed, zorder=3)
                             plt.plot(x_fitted, y_fitted, color=color, label=fit_label, lw=lw_fit, path_effects=pe_stroke_fit, alpha=alpha_fit, zorder=2)
                             
                             plt.xlabel(r'# Cycles')
@@ -252,10 +223,10 @@ for wf_idx in [1]:
                             plt.legend()
                             
                         for peak_freq in bad_fit_freqs:
-                            peak_fit_params = f, peak_idx, sample_hw, z_alpha, min_fit_xi_idx, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
-                            tc, tc_std, A, A_std, freq, is_signal, is_noise, decayed_idx, target_coherence, x, x_fitted, y_fitted = fit_peak(*peak_fit_params)
+                            fit_peak_params = f, peak_idx, sample_hw, z_alpha, min_fit_xi_idx, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
+                            tc, A, freq, is_signal, is_noise, decayed_idx, xis_plot, target_coherences_plot, x, x_fitted, y_fitted = fit_peak(*fit_peak_params)
                             
-                            # Get MSE
+                            # Get chi square
                             
                             # Add params to row dict
                             
