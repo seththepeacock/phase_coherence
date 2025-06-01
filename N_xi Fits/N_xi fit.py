@@ -11,9 +11,9 @@ import matplotlib.patheffects as pe
 from tqdm import tqdm
 from collections import defaultdict
 
-for wf_idx in [1]:
-    for species in ['Anole']:
-        for rho in [0.6]:
+for wf_idx in [2]:
+    for species in ['Anole', 'Owl', 'Human']:
+        for rho in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
             for dense_stft, const_N_pd in [(1, 1)]:
                     print(f"Processing {species} {wf_idx}")
                     
@@ -41,15 +41,16 @@ for wf_idx in [1]:
                     tauS = int(tau*fs)
                     min_xi = 0.001
                     delta_xi = min_xi
-                    skip_min_xi = True if (dense_stft, const_N_pd) == (0, 0) else False
-                    force_recalc_coherences = 1
+                    # skip_min_xi = True if (dense_stft, const_N_pd) == (0, 0) else False
+                    skip_min_xi = False
+                    force_recalc_coherences = 0
                     
                     
                     # Plotting options
                     plotting_colossogram = 1
-                    plotting_peak_picks = 0
-                    plotting_fits = 0
-                    show_plots = 1
+                    plotting_peak_picks = 1
+                    plotting_fits = 1
+                    show_plots = 0
                  
                     # Z-Test Parameters
                     sample_hw = 10
@@ -80,7 +81,7 @@ for wf_idx in [1]:
                     
                     # Species specific params
                     max_xis = {
-                        'Anole': 0.2,
+                        'Anole': 0.1,
                         'Human': 1.0,
                         'Owl': 0.2
                     }
@@ -95,9 +96,7 @@ for wf_idx in [1]:
                     max_khz = max_khzs[species]
                     max_xi = max_xis[species]
                     if const_N_pd:
-                        # TEST
-                        global_max_xi = max_xi
-                        # global_max_xi = max(max_xis.values())
+                        global_max_xi = max(max_xis.values())
                     else:
                         global_max_xi = None
                     
@@ -117,11 +116,6 @@ for wf_idx in [1]:
                     os.makedirs(pkl_folder, exist_ok=True)
                     if os.path.exists(pkl_folder + pkl_fn + '.pkl') and not force_recalc_coherences:
                         with open(pkl_folder + pkl_fn + '.pkl', 'rb') as file:
-                            # coherences, f, xis, tau, rho, wf_fn, species = pickle.load(file)
-                            # N_pd_min=0
-                            # N_pd_max=0
-                            # seg_spacing=0
-                            # snapping_rhortle=0
                             coherences, f, xis, tau, rho, N_pd_min, N_pd_max, seg_spacing, snapping_rhortle, wf_fn, species = pickle.load(file)
                     else:
                         print(f"Calculating coherences for {fn_id}")
@@ -156,7 +150,7 @@ for wf_idx in [1]:
                         rho_str = rf"$\rho={rho}$ - Snapping Rhortle"
                     else:
                         rho_str = rf"$\rho={rho}$"
-                    suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{rho_str}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi}$]   [{wf_length}s WF]   [{N_pd_str}]"
+                    suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{rho_str}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi*1000:.0f}$ms]   [{wf_length}s WF]   [{N_pd_str}]"
                     if dense_stft:
                         suptitle += f'   [STFT Spacing={seg_spacing*1000}ms]'
                     
@@ -167,7 +161,7 @@ for wf_idx in [1]:
                         plot_colossogram(coherences, f, xis, tau, max_khz=max_khz, cmap='magma')
                         for peak_idx in peak_idxs:
                             plt.scatter(min_xi*1000 + (max_xi*1000)/50, f[peak_idx] / 1000, c='w', marker='>', label="Peak at " + f"{f[peak_idx]:0f}Hz", alpha=0.5)
-                        plt.title(f"Colossogram - {species} {wf_idx}", fontsize=18)
+                        plt.title(f"Colossogram", fontsize=18)
                         plt.suptitle(suptitle, fontsize=10)
                         os.makedirs(f'{fig_folder}\Colossograms', exist_ok=True)
                         plt.savefig(f'{fig_folder}\Colossograms\{fn_id} (Colossogram).png', dpi=300)
@@ -185,7 +179,7 @@ for wf_idx in [1]:
                         plt.suptitle(suptitle)
                         # Coherence slice plot
                         plt.subplot(2, 1, 1)
-                        plt.title(rf"Colossogram Slice at $\xi={xis[xi_idx]:.3f} - {species} {wf_idx}$")
+                        plt.title(rf"Colossogram Slice at $\xi={xis[xi_idx]:.3f}$")
                         plt.plot(f / 1000, coherence_slice, label=r'$C_{\xi}$, $\xi={target_xi}$')
                         for peak_idx in peak_idxs:
                             plt.scatter(f[peak_idx] / 1000, coherence_slice[peak_idx], c='r')
@@ -194,7 +188,7 @@ for wf_idx in [1]:
                         plt.xlim(0, max_khz)
                         # PSD plot
                         plt.subplot(2, 1, 2)
-                        plt.title(rf"{species} {wf_idx} PSD - {species} {wf_idx}")
+                        plt.title(rf"Power Spectral Density")
                         plt.plot(f / 1000, 10*np.log10(psd), label='PSD')
                         for peak_idx in peak_idxs:
                             plt.scatter(f[peak_idx] / 1000, 10*np.log10(psd[peak_idx]), c='r')
