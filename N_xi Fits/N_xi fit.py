@@ -10,10 +10,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 from tqdm import tqdm
 from collections import defaultdict
-
-for wf_idx in [2]:
+for rho in [0.7, 0.65, 0.75]:
     for species in ['Anole', 'Owl', 'Human']:
-        for rho in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+        for wf_idx in [0, 1, 2, 3]:
             for dense_stft, const_N_pd in [(1, 1)]:
                     print(f"Processing {species} {wf_idx}")
                     
@@ -25,12 +24,7 @@ for wf_idx in [2]:
                     wf = spectral_filter(wf, fs, hpf_cutoff_freq, type='hp')
                     
                     # Crop to desired length
-                    if not dense_stft:
-                        wf_length = 60
-                    else:
-                        wf_length = 30
-                    
-                    
+                    wf_length = 30 if dense_stft else 60                  
                     wf = wf[:int(wf_length*fs)]
                     
                     "PARAMETERS"
@@ -47,14 +41,14 @@ for wf_idx in [2]:
                     
                     
                     # Plotting options
-                    plotting_colossogram = 1
-                    plotting_peak_picks = 1
+                    plotting_colossogram = 0
+                    plotting_peak_picks = 0
                     plotting_fits = 1
-                    show_plots = 0
+                    show_plots = 1
                  
                     # Z-Test Parameters
-                    sample_hw = 10
-                    z_alpha = 0.05 # Minimum p-value for z-test; we assume noise unless p < z_alpha (so higher z_alpha means more signal bins)
+                    sample_hw = 5
+                    alpha_z = 0.01 # Minimum p-value for z-test; we assume noise unless p < alpha_z (so higher alpha_z means more signal bins)
 
                     # Fitting Parameters
                     min_fit_xi_idx = 1
@@ -82,31 +76,28 @@ for wf_idx in [2]:
                     # Species specific params
                     max_xis = {
                         'Anole': 0.1,
-                        'Human': 1.0,
-                        'Owl': 0.2
+                        'Owl': 0.1,
+                        'Human': 1.5
                     }
                     
                     
                     max_khzs = {
                         'Anole': 6,
-                        'Human': 6,
+                        'Human': 10,
                         'Owl': 12
                     }
                     
                     max_khz = max_khzs[species]
                     max_xi = max_xis[species]
-                    if const_N_pd:
-                        global_max_xi = max(max_xis.values())
-                    else:
-                        global_max_xi = None
-                    
+                    global_max_xi = max(max_xis.values()) if const_N_pd else None
+
                     "Set filepaths"
                     fn_id = rf"{species} {wf_idx}, const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
                     # Calclulate Npd if we're going to hold it constant
                     pkl_fn = f'{fn_id} (Coherences)'
                     N_xi_folder = r'N_xi Fits/'
                     pkl_folder = N_xi_folder + r'Coherences Pickles/'
-                    fig_folder = N_xi_folder + rf'Figures (rho={rho})/'
+                    fig_folder = N_xi_folder + rf'Figures/'
 
                     "Calculate things"
                     # Raise warning if tauS is not a power of two AND the samplerate is indeed 44100
@@ -152,7 +143,8 @@ for wf_idx in [2]:
                         rho_str = rf"$\rho={rho}$"
                     suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{rho_str}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi*1000:.0f}$ms]   [{wf_length}s WF]   [{N_pd_str}]"
                     if dense_stft:
-                        suptitle += f'   [STFT Spacing={seg_spacing*1000}ms]'
+                        suptitle += f'   [Dense STFT ({seg_spacing*1000}ms)]'
+                    
                     
                     if plotting_colossogram:
                         print("Plotting Colossogram")
@@ -216,10 +208,9 @@ for wf_idx in [2]:
 
                         for peak_idx, color, subplot_idx in zip(peak_idxs, colors, [1, 2, 3, 4]):
                             # Pack all parameters for fit_peak together into a tuple for compactness
-                            peak_fit_params = f, peak_idx, sample_hw, z_alpha, min_fit_xi_idx, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
+                            peak_fit_params = f, peak_idx, sample_hw, alpha_z, min_fit_xi_idx, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
                             # Fit peak
-                            tc, tc_std, A, A_std, freq, is_signal, is_noise, decayed_idx, target_coherence, x, x_fitted, y_fitted = fit_peak(*peak_fit_params)
-                            # Get MSE
+                            tc, tc_std, A, A_std, mse, freq, is_signal, is_noise, decayed_idx, target_coherence, target_coherence_cropped, xis_num_cycles, x_fitted, y_fitted = fit_peak(*peak_fit_params)
                             
                             # Add params to a row dict
                             row = {
@@ -230,26 +221,27 @@ for wf_idx in [2]:
                             # Plot this peak
                             tc_label = rf"{tc*freq:.0f} \text{{ Cycles}}"
                             plt.subplot(2, 2, subplot_idx)
-                            fit_label = rf"{freq:.0f}Hz ($T={tc_label}$, $A={A:.2f}$)"
+                            plt.title(rf"{freq:.0f}Hz Peak")
+                            fit_label = rf"$T={tc_label}\pm{tc_std:.2g}$, $A={A:.2f}\pm{A_std:.2g}$, MSE={mse:.2g}"
 
-                            
-                            plt.scatter(x[is_signal], target_coherence[is_signal], s=s_signal, edgecolors=edgecolor_signal, marker=marker_signal, color=color, zorder=1)
-                            plt.scatter(x[is_noise], target_coherence[is_noise], s=s_noise, color=color, edgecolors=edgecolor_noise, zorder=1)
+                            # Plot the coherence
+                            plt.scatter(xis_num_cycles[is_signal], target_coherence[is_signal], s=s_signal, edgecolors=edgecolor_signal, marker=marker_signal, color=color, zorder=1)
+                            plt.scatter(xis_num_cycles[is_noise], target_coherence[is_noise], s=s_noise, color=color, edgecolors=edgecolor_noise, zorder=1)
 
                             # Mark decayed point
-                            plt.scatter(x[decayed_idx], target_coherence[decayed_idx], s=s_decayed, marker=marker_decayed, color=color, edgecolors=edgecolor_decayed, zorder=3)
+                            plt.scatter(xis_num_cycles[decayed_idx], target_coherence[decayed_idx], s=s_decayed, marker=marker_decayed, color=color, edgecolors=edgecolor_decayed, zorder=3)
+                            # Plot the fit
                             plt.plot(x_fitted, y_fitted, color=color, label=fit_label, lw=lw_fit, path_effects=pe_stroke_fit, alpha=alpha_fit, zorder=2)
-                            
+                            plt.plot(x_fitted, target_coherence_cropped, color='k')
                             plt.xlabel(r'# Cycles')
                             plt.ylabel(r'$C_{\xi}$')           
                             plt.ylim(0, 1)
                             plt.legend()
                             
                         for peak_freq in bad_fit_freqs:
-                            peak_fit_params = f, peak_idx, sample_hw, z_alpha, min_fit_xi_idx, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
-                            tc, tc_std, A, A_std, freq, is_signal, is_noise, decayed_idx, target_coherence, x, x_fitted, y_fitted = fit_peak(*peak_fit_params)
+                            peak_fit_params = f, peak_idx, sample_hw, alpha_z, min_fit_xi_idx, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
+                            tc, tc_std, A, A_std, mse, freq, is_signal, is_noise, decayed_idx, target_coherence, target_coherence_cropped, xis_num_cycles, x_fitted, y_fitted = fit_peak(*peak_fit_params)
                             
-                            # Get MSE
                             
                             # Add params to row dict
                             

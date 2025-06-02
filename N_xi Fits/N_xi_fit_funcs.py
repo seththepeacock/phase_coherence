@@ -23,42 +23,42 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
     match wf_fn:
         # Anoles
         case 'AC6rearSOAEwfB1.mat': #0
-            peak_freqs = [1232, 2153, 3710, 4501]
+            peak_freqs = [1233, 2164, 3714, 4500]
             bad_fit_freqs = []
         case 'ACsb4rearSOAEwf1.mat': #1
-            peak_freqs = []
+            peak_freqs = [964, 3031, 3160, 3957]
             bad_fit_freqs = []
         case 'ACsb24rearSOAEwfA1.mat': #2    
-            peak_freqs = []
+            peak_freqs = [1809, 2169, 3112, 3478]
             bad_fit_freqs = []
         case 'ACsb30learSOAEwfA2.mat': #3
-            peak_freqs = []
+            peak_freqs = [1803, 2137, 2406, 2778]
             bad_fit_freqs = []
         # Humans
         case 'ALrearSOAEwf1.mat': #0
-            peak_freqs = [2660, 2940, 3220, 3870]
+            peak_freqs = [2665, 2945, 3219, 3865]
             bad_fit_freqs = []
         case 'JIrearSOAEwf2.mat': #1
-            peak_freqs = []
+            peak_freqs = [2342, 3402, 8312, 8678]
             bad_fit_freqs = []
         case 'LSrearSOAEwf1.mat': #2
-            peak_freqs = []
+            peak_freqs = [732, 985, 1637, 2229]
             bad_fit_freqs = []
         case 'TH13RearwaveformSOAE.mat': #3
-            peak_freqs = []
+            peak_freqs = [904, 1518, 2040, 2697]
             bad_fit_freqs = []
         # Owls
         case 'Owl2R1.mat': #0
-            peak_freqs = []
+            peak_freqs = [4355, 7451, 8458, 9039]
             bad_fit_freqs = []
         case 'Owl7L1.mat': #1
-            peak_freqs = []
+            peak_freqs = [6896, 7941, 8861, 9271]
             bad_fit_freqs = []
         case 'TAG6rearSOAEwf1.mat': #2
-            peak_freqs = []
+            peak_freqs = [5626, 8096, 8484, 9862]
             bad_fit_freqs = []
         case 'TAG9rearSOAEwf2.mat': #3
-            peak_freqs = []
+            peak_freqs = [4931, 6993, 7450, 9878]
             bad_fit_freqs = []
     return wf, wf_fn, fs, np.array(peak_freqs), np.array(bad_fit_freqs)
         
@@ -153,7 +153,7 @@ def fit_peak(f, peak_idx, sample_hw, z_alpha, min_fit_xi_idx, trim_step, sigma_w
     x_to_fit = xis[fit_start_idx:decayed_idx]
     y_to_fit = target_coherence[fit_start_idx:decayed_idx]
     sigma = get_fit_sigma(y_to_fit, sigma_weighting_power) 
-    attempts = 0
+    failures = 0
     popt = None
     
     while len(x_to_fit) > trim_step and popt is None:
@@ -162,12 +162,12 @@ def fit_peak(f, peak_idx, sample_hw, z_alpha, min_fit_xi_idx, trim_step, sigma_w
             break  # Fit succeeded!
         except (RuntimeError, ValueError) as e:
             # Trim the x, y, 
-            attempts += 1
+            failures += 1
             x_to_fit = x_to_fit[trim_step:-trim_step]
             y_to_fit = y_to_fit[trim_step:-trim_step]
             sigma = sigma[trim_step:-trim_step]
             
-            print(f"Fit failed (attempt {attempts}): — trimmed to {len(x_to_fit)} points")
+            print(f"Fit failed (attempt {failures}): — trimmed to {len(x_to_fit)} points")
     if popt is None:
         raise RuntimeError(f"Curve fit failed after all attempts ({freq:.0f}Hz from {wf_fn})")
     else:
@@ -177,13 +177,19 @@ def fit_peak(f, peak_idx, sample_hw, z_alpha, min_fit_xi_idx, trim_step, sigma_w
     tc = popt[0]
     tc_std = perr[0]
     A = popt[1]
-    A_std = perr[0]
+    A_std = perr[1]
     # Convert the xis array to number of cycles
     xis_num_cycles = xis  * freq
     # Get the fitted exponential decay
     y_fitted = exp_decay(x_to_fit, *popt)
     # Convert the x array for the fit into number of cycles
     x_fitted = x_to_fit * freq
-   
+    # Get coherence array that corresponds to the final fit
+    target_coherence_cropped = target_coherence[fit_start_idx:decayed_idx]
+    if failures > 0:
+        target_coherence_cropped = target_coherence[failures*trim_step:-failures*trim_step]
+
+    # Calculate MSE
+    mse = np.mean((y_fitted - target_coherence_cropped)**2)
     
-    return tc, tc_std, A, A_std, freq, is_signal, is_noise, decayed_idx, target_coherence, xis_num_cycles, x_fitted, y_fitted
+    return tc, tc_std, A, A_std, mse, freq, is_signal, is_noise, decayed_idx, target_coherence, target_coherence_cropped, xis_num_cycles, x_fitted, y_fitted
