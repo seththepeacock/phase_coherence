@@ -13,9 +13,9 @@ import pandas as pd
 # Initialize list for row dicts for xlsx file
 rows = []
 
-for rho in [0.7]:
-    for wf_idx in [0, 1, 2, 3]:
-        for species in ['Anole', 'Owl', 'Human']:
+for rho in [0.7, 0.75, 0.65]:
+    for species in ['Anole', 'Owl', 'Human']:
+        for wf_idx in [0, 1, 2, 3]:
             for dense_stft, const_N_pd in [(1, 1)]:
                 if species == 'Human' and wf_idx != 3:
                     continue
@@ -52,7 +52,7 @@ for rho in [0.7]:
                 show_plots = 0
                 
                 # Z-Test Parameters
-                sample_hw = 1
+                sample_hw = 2
                 alpha_z = 1e-9 # Minimum p-value for z-test; we assume noise unless p < alpha_z (so higher alpha_z means more signal bins)
 
                 # Fitting Parameters
@@ -62,8 +62,8 @@ for rho in [0.7]:
                 sigma_weighting_power = 0 # > 0 means less weight on lower coherence bins in fit
                 
                 # Plotting parameters
-                plot_noise_means_on_fits = 1
-                plot_noise_bin_on_fits = 1
+                plot_noise_on_fits = 1
+                plot_single_noise_bin_on_fits = 0 # Set this to the frequency you want to plot
                 s_signal=5
                 s_noise=5
                 s_decayed = 100
@@ -97,8 +97,8 @@ for rho in [0.7]:
                 
                 # This determines where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi] 
                 decay_start_max_xis = {
-                    'Anole' : 0.01,
-                    'Owl' : 0.01,
+                    'Anole' : 0.03,
+                    'Owl' : 0.03,
                     'Human' : 0.2
                 }
 
@@ -226,7 +226,7 @@ for rho in [0.7]:
                                 continue
                         
                         plt.close('all')
-                        plt.figure(figsize=(12, 10))
+                        plt.figure(figsize=(15, 10))
                         plt.suptitle(suptitle)
 
                         for peak_idx, color, subplot_idx in zip(peak_idxs, colors, [1, 2, 3, 4]):
@@ -236,15 +236,15 @@ for rho in [0.7]:
                             fit_peak_output = fit_peak(*peak_fit_params)
                             
                             # Handle the case where the peak fit failed
-                            if len(fit_peak_output) == 8:
-                                freq, is_signal, is_noise, xi_decayed, decayed_idx, xis_num_cycles, target_coherence, noise_means = fit_peak_output
+                            if len(fit_peak_output) == 9:
+                                freq, is_signal, is_noise, xi_decayed, decayed_idx, xis_num_cycles, target_coherence, noise_means, noise_stds = fit_peak_output
                                 T, T_std, A, A_std, mse = np.nan, np.nan, np.nan, np.nan, np.nan
                                 # Begin plot
                                 plt.subplot(2, 2, subplot_idx)
                                 plt.title(rf"{freq:.0f}Hz Peak (FIT FAILED)")
                             # Handle the case where the peak fit succeeded
                             else:
-                                T, T_std, A, A_std, mse, freq, is_signal, is_noise, decayed_idx, target_coherence, target_coherence_cropped, xis_num_cycles, x_fitted, y_fitted, noise_means = fit_peak_output
+                                T, T_std, A, A_std, mse, freq, is_signal, is_noise, decayed_idx, target_coherence, target_coherence_cropped, xis_num_cycles, x_fitted, y_fitted, noise_means, noise_stds = fit_peak_output
                                 # Plot the fit
                                 plt.subplot(2, 2, subplot_idx)
                                 plt.title(rf"{freq:.0f}Hz Peak")
@@ -253,15 +253,20 @@ for rho in [0.7]:
                                 plt.plot(x_fitted, y_fitted, color=color, label=fit_label, lw=lw_fit, path_effects=pe_stroke_fit, alpha=alpha_fit, zorder=2)
                     
                             # Plot the coherence
-                            plt.scatter(xis_num_cycles[is_signal], target_coherence[is_signal], s=s_signal, edgecolors=edgecolor_signal, marker=marker_signal, color=color, zorder=1, label='Below Noise Floor')
-                            plt.scatter(xis_num_cycles[is_noise], target_coherence[is_noise], s=s_noise, color=color, edgecolors=edgecolor_noise, zorder=1, label='Above Noise Floor')
+                            plt.scatter(xis_num_cycles[is_signal], target_coherence[is_signal], s=s_signal, edgecolors=edgecolor_signal, marker=marker_signal, color=color, zorder=1, label='Above Noise Floor')
+                            plt.scatter(xis_num_cycles[is_noise], target_coherence[is_noise], s=s_noise, color=color, edgecolors=edgecolor_noise, zorder=1, label='Below Noise Floor')
                             # Mark decayed point
                             plt.scatter(xis_num_cycles[decayed_idx], target_coherence[decayed_idx], s=s_decayed, marker=marker_decayed, color=color, edgecolors=edgecolor_decayed, zorder=3)
-                            if plot_noise_means_on_fits:
+                            if plot_noise_on_fits:
                                 # plt.scatter(xis_num_cycles, noise_means, label='Noise Mean (Above 12kHz)', s=1, color=colors[4])
-                                plt.plot(xis_num_cycles, noise_means, label='Noise Mean (Above 12kHz)', color=colors[4])
-                            if plot_noise_bin_on_fits:
-                                noise_freq = 15000
+                                plt.plot(xis_num_cycles, noise_means, label='Noise Above 12kHz ($\mu \pm \sigma$)', color=colors[4])
+                                plt.fill_between(xis_num_cycles,
+                                noise_means - noise_stds,
+                                noise_means + noise_stds,
+                                color=colors[4],
+                                alpha=0.3)
+                            if plot_single_noise_bin_on_fits:
+                                noise_freq = plot_single_noise_bin_on_fits
                                 noise_target_idx = np.argmin(np.abs(f-noise_freq))
                                 # plt.scatter(xis_num_cycles, coherences[noise_target_idx, :], label=f'Noise Bin ({noise_freq/1000:.0f}kHz)', s=1, color=colors[5])
                                 plt.plot(xis_num_cycles, coherences[noise_target_idx, :], label=f'Noise Bin ({noise_freq/1000:.0f}kHz)', color=colors[5])

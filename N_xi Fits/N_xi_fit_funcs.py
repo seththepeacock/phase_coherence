@@ -137,7 +137,7 @@ def get_is_signal(coherences, f, xis, f_target_idx, f_noise=12000, sample_hw=10,
         print(f"Signal at {f[f_target_idx]:.0f}Hz never decays!")
     xi_decayed = xis[decayed_idx]
     
-    return is_signal, target_coherences, xi_decayed, decayed_idx, noise_means
+    return is_signal, target_coherences, xi_decayed, decayed_idx, noise_means, noise_stds
 
 def exp_decay(x, T, amp):
     return amp * np.exp(-x/T)
@@ -153,13 +153,15 @@ def fit_peak(f, peak_idx, sample_hw, z_alpha, decay_start_max_xi, trim_step, sig
     else: 
         get_fit_sigma = lambda y, sigma_weighting_power: 1 / (y**sigma_weighting_power+ 1e-9)  
     # Calculate signal vs noise and point of decay
-    is_signal, target_coherence, xi_decayed, decayed_idx, noise_means = get_is_signal(coherences, f, xis, peak_idx, f_noise=12000, sample_hw=sample_hw, z_alpha=z_alpha)
+    is_signal, target_coherence, xi_decayed, decayed_idx, noise_means, noise_stds = get_is_signal(coherences, f, xis, peak_idx, f_noise=12000, sample_hw=sample_hw, z_alpha=z_alpha)
     is_noise = ~is_signal
     
     # Curve Fit
     print(f"Fitting exp decay to {freq:.0f}Hz peak on {wf_fn} with rho={rho}")
     # Find where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi] 
     decay_start_max_xi_idx = np.argmin(np.abs(xis-decay_start_max_xi))
+    # But if the signal has decayed by this point, then the latest the fit should end is, of course, the decay point!
+    decay_start_max_xi_idx = min(decay_start_max_xi_idx, decayed_idx)
     maxima = find_peaks(target_coherence[:decay_start_max_xi_idx])[0]
     num_maxima = len(maxima)
     match num_maxima:
@@ -170,7 +172,7 @@ def fit_peak(f, peak_idx, sample_hw, z_alpha, decay_start_max_xi, trim_step, sig
         case 0:
             fit_start_idx = 0
         case _:
-            raise RuntimeError(f"Three or more peaks found in first {decay_start_max_xi*10:.0f}ms of xi!")
+            raise RuntimeError(f"Three or more peaks found in first {decay_start_max_xi*1000:.0f}ms of xi!")
     x_to_fit = xis[fit_start_idx:decayed_idx]
     y_to_fit = target_coherence[fit_start_idx:decayed_idx]
     sigma = get_fit_sigma(y_to_fit, sigma_weighting_power) 
@@ -214,4 +216,4 @@ def fit_peak(f, peak_idx, sample_hw, z_alpha, decay_start_max_xi, trim_step, sig
         # Calculate MSE
         mse = np.mean((y_fitted - target_coherence_cropped)**2)
     
-        return T, T_std, A, A_std, mse, freq, is_signal, is_noise, decayed_idx, target_coherence, target_coherence_cropped, xis_num_cycles, x_fitted, y_fitted, noise_means
+        return T, T_std, A, A_std, mse, freq, is_signal, is_noise, decayed_idx, target_coherence, target_coherence_cropped, xis_num_cycles, x_fitted, y_fitted, noise_means, noise_stds
