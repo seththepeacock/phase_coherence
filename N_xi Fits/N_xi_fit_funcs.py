@@ -98,38 +98,32 @@ def get_fn(species, idx):
         case _:
             raise ValueError("Species must be 'Anole', 'Human', or 'Owl'!")
 
-def get_is_signal(coherences, f, xis, f_target_idx, f_noise=12000, sample_hw=10, z_alpha=0.05):
-    f_noise_idx = (np.abs(f - f_noise)).argmin()  # find frequency bin index closest to our 12kHz cutoff
-    # Get mean and std dev of coherence (over frequency axis, axis=0) for each xi value (using only "noise" frequencies above our cutoff)
+def get_is_signal(coherences, f, xis, f_target_idx, f_noise=0, noise_floor_bw_factor=None):
+    if noise_floor_bw_factor is None:
+        raise ValueError("You must input noise_floor_bw_factor!")
+    # Get the coherence slice we care about
+    target_coherences=coherences[f_target_idx, :]
+    # find frequency bin index closest to our cutoff (NOW JUST 0)
+    f_noise_idx = (np.abs(f - f_noise)).argmin()  
+    # Get mean and std dev of coherence (over frequency axis, axis=0) for each xi value (using ALL frequencies)
     noise_means = np.mean(coherences[f_noise_idx:, :], axis=0) 
     noise_stds = np.std(coherences[f_noise_idx:, :], axis=0, ddof=1) # ddof=1 since we're using sample mean (not true mean) in sample std estimate
-    # Now for each xi value, run a z-test to see if it's noise or not
+    # Now for each xi value, see if it's noise by determining if it's noise_floor_bw_factor*sigma away from the mean
     is_signal = np.full(len(xis), True, dtype=bool)
+    
     for xi_idx in range(len(xis)):
-        # Skip xi values that are too close to the edges to get a full sample
-        if xi_idx < sample_hw:
+        # TEST
+        if xi_idx < 5:
             is_signal[xi_idx] = True
             continue
-        elif xi_idx >= len(xis) - sample_hw:
-            is_signal[xi_idx] = False
-        coherence_sample = coherences[f_target_idx, xi_idx - sample_hw: xi_idx + sample_hw]
+        coherence_value = coherences[f_target_idx, xi_idx]
+        noise_floor_upper_limit = noise_means[xi_idx] + noise_floor_bw_factor * noise_stds[xi_idx]
         # Calculate z test statistic
-        sample_mean = np.mean(coherence_sample)
-        z = (sample_mean - noise_means[xi_idx]) / (noise_stds[xi_idx]/np.sqrt(len(coherence_sample)))
-        # As n (sample size) gets smaller, sqrt(n) gets smaller → the standard error increases -> more likely to fail to reject null -> more noise bins.
-        # Think of the standard error as the "blur" or "noise" around your estimate. 
-        # Smaller samples = blurrier estimates = harder to be confident your sample mean is really different from the null mean.
-        # Calculate p-value for a one-tailed test (sf = survival function = 1 - cdf for a right tailed z test)
-        # p = Pr(Z > z), i.e., sample mean > null mean
-        p = sp.stats.norm.sf(z)
-        is_signal[xi_idx] = p < z_alpha
-    target_coherences=coherences[f_target_idx, :]
+        is_signal[xi_idx] = coherence_value > noise_floor_upper_limit
     
     decayed_idx = -1
     # Find decayed point
     for i in range(len(is_signal)):
-        if i < sample_hw: # These are automatically set to signal anyway but what the heck
-            continue
         if not is_signal[i]:
             decayed_idx = i
             break
@@ -142,7 +136,7 @@ def get_is_signal(coherences, f, xis, f_target_idx, f_noise=12000, sample_hw=10,
 def exp_decay(x, T, amp):
     return amp * np.exp(-x/T)
 
-def fit_peak(f, peak_idx, sample_hw, z_alpha, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho):
+def fit_peak(f, peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho):
     # Get freq
     freq = f[peak_idx]
     # Convert the xis array to number of cycles
@@ -153,7 +147,7 @@ def fit_peak(f, peak_idx, sample_hw, z_alpha, decay_start_max_xi, trim_step, sig
     else: 
         get_fit_sigma = lambda y, sigma_weighting_power: 1 / (y**sigma_weighting_power+ 1e-9)  
     # Calculate signal vs noise and point of decay
-    is_signal, target_coherence, xi_decayed, decayed_idx, noise_means, noise_stds = get_is_signal(coherences, f, xis, peak_idx, f_noise=12000, sample_hw=sample_hw, z_alpha=z_alpha)
+    is_signal, target_coherence, xi_decayed, decayed_idx, noise_means, noise_stds = get_is_signal(coherences, f, xis, peak_idx, noise_floor_bw_factor=noise_floor_bw_factor)
     is_noise = ~is_signal
     
     # Curve Fit
@@ -197,7 +191,7 @@ def fit_peak(f, peak_idx, sample_hw, z_alpha, decay_start_max_xi, trim_step, sig
     if popt is None:
         print("Curve fit failed after all attempts ({freq:.0f}Hz from {wf_fn})")
         # raise RuntimeError(f"Curve fit failed after all attempts ({freq:.0f}Hz from {wf_fn})")
-        return freq, is_signal, is_noise, xi_decayed, decayed_idx, xis_num_cycles, target_coherence, noise_means
+        return freq, is_signal, is_noise, xi_decayed, decayed_idx, xis_num_cycles, target_coherence, noise_means, noise_stds
     else:
         print("Fitting successful!")
         # Get the paramters and stndard devition

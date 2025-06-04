@@ -48,17 +48,16 @@ for rho in [0.7]:
                 
                 
                 # Plotting options
-                plotting_colossogram = 1
+                plotting_colossogram = 0
                 plotting_peak_picks = 1
                 plotting_fits = 1
                 show_plots = 0
                 
-                # Z-Test Parameters
-                sample_hw = 2
-                alpha_z = 1e-9 # Minimum p-value for z-test; we assume noise unless p < alpha_z (so higher alpha_z means more signal bins)
-
+                
+                # Decay Star Method
+                noise_floor_bw_factor = 0.7 # This is how many standard deviations away from the mean to set the noise floor
+                
                 # Fitting Parameters
-                decay_start_max_xi = 0 
                 trim_step = 1
                 A_max = np.inf # 1 or np.inf
                 sigma_weighting_power = 0 # > 0 means less weight on lower coherence bins in fit
@@ -232,11 +231,10 @@ for rho in [0.7]:
                         
                         plt.close('all')
                         plt.figure(figsize=(15, 10))
-                        plt.suptitle(suptitle)
 
                         for peak_idx, color, subplot_idx in zip(good_peak_idxs, colors, [1, 2, 3, 4]):
                             # Pack all parameters for fit_peak together into a tuple for compactness
-                            peak_fit_params = f, peak_idx, sample_hw, alpha_z, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
+                            peak_fit_params = f, peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
                             # Fit peak
                             fit_peak_output = fit_peak(*peak_fit_params)
                             
@@ -254,7 +252,10 @@ for rho in [0.7]:
                                 plt.subplot(2, 2, subplot_idx)
                                 plt.title(rf"{freq:.0f}Hz Peak")
                                 T_label = rf"{T*freq:.0f} \text{{ Cycles}}"
-                                fit_label = rf"$T={T_label}\pm{T_std:.2g}$, $A={A:.2f}\pm{A_std:.2g}$, MSE={mse:.2g}"
+                                if T_std < np.inf and A_std < np.inf:
+                                    fit_label = rf"$T={T_label}\pm{T_std:.2g}$, $A={A:.2f}\pm{A_std:.2g}$, MSE={mse:.2g}"
+                                else:
+                                    print("FIX FIT LABEL")
                                 plt.plot(x_fitted, y_fitted, color=color, label=fit_label, lw=lw_fit, path_effects=pe_stroke_fit, alpha=alpha_fit, zorder=2)
                     
                             # Plot the coherence
@@ -264,10 +265,10 @@ for rho in [0.7]:
                             plt.scatter(xis_num_cycles[decayed_idx], target_coherence[decayed_idx], s=s_decayed, marker=marker_decayed, color=color, edgecolors=edgecolor_decayed, zorder=3)
                             if plot_noise_on_fits:
                                 # plt.scatter(xis_num_cycles, noise_means, label='Noise Mean (Above 12kHz)', s=1, color=colors[4])
-                                plt.plot(xis_num_cycles, noise_means, label='Noise Above 12kHz ($\mu \pm \sigma$)', color=colors[4])
+                                plt.plot(xis_num_cycles, noise_means, label=f'All Bins $\mu \pm (\sigma*{noise_floor_bw_factor})$', color=colors[4])
                                 plt.fill_between(xis_num_cycles,
-                                noise_means - noise_stds,
-                                noise_means + noise_stds,
+                                noise_means - noise_stds*noise_floor_bw_factor,
+                                noise_means + noise_stds*noise_floor_bw_factor,
                                 color=colors[4],
                                 alpha=0.3)
                             if plot_single_noise_bin_on_fits:
@@ -299,9 +300,10 @@ for rho in [0.7]:
                         # Book it!
                         plt.tight_layout()
                         os.makedirs(fig_folder, exist_ok=True)
-                        fits_str = f'{fig_folder}\Fits' if good_peaks else 'Additional Figures\Bad Fits'   
-                        os.makedirs(f'{fig_folder}\{fits_str}', exist_ok=True) 
-                        plt.savefig(f'{fig_folder}\{fits_str}\{fn_id} ({fits_str}).png', dpi=300)
+                        fits_folder = f'{fig_folder}' if good_peaks else 'Additional Figures'
+                        fits_str = f'Fits' if good_peaks else 'Bad Fits'   
+                        os.makedirs(f'{fits_folder}\{fits_str}', exist_ok=True) 
+                        plt.savefig(f'{fits_folder}\{fits_str}\{fn_id} ({fits_str}).png', dpi=300)
                         if show_plots:
                             plt.show()
                         
