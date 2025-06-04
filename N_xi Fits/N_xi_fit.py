@@ -10,18 +10,19 @@ from tqdm import tqdm
 from collections import defaultdict
 import pandas as pd
 
-# Initialize list for row dicts for xlsx file
-rows = []
+
 
 # for rho in [0.7, 0.75, 0.65]:
-for rho in [0.7]:
+for rho in [0.7, 0.75, 0.65]:
+    # Initialize list for row dicts for xlsx file
+    rows = []
     for species in ['Anole', 'Owl', 'Human']:
         for wf_idx in [0, 1, 2, 3]:
             for dense_stft, const_N_pd in [(1, 1)]:
                 print(f"Processing {species} {wf_idx}")
-                if species == 'Human' and wf_idx ==1:
-                    # ALSO REMOVE THE ONE BELOW CROPPING MAX XI for 2
-                    continue
+                # if species == 'Human' and wf_idx ==1:
+                #     # ALSO REMOVE THE ONE BELOW CROPPING MAX XI for 2
+                #     continue
                 
                 "Get waveform"
                 wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(species=species, wf_idx=wf_idx)
@@ -39,7 +40,7 @@ for rho in [0.7]:
                 # rho = None
                 snapping_rhortle = 0
                 tau = 2**13 / 44100 # Everyone uses the same tau
-                tauS = int(tau*fs)
+                tauS = int(tau*fs) # This is just 2**13 for efficient FFT implementation, unless fs!=44100
                 min_xi = 0.001
                 delta_xi = min_xi
                 # skip_min_xi = True if (dense_stft, const_N_pd) == (0, 0) else False
@@ -49,8 +50,8 @@ for rho in [0.7]:
                 
                 # Plotting options
                 plotting_colossogram = 0
-                plotting_peak_picks = 1
-                plotting_fits = 1
+                plotting_peak_picks = 0
+                plotting_fits = 0
                 show_plots = 0
                 
                 
@@ -106,9 +107,9 @@ for rho in [0.7]:
                 decay_start_max_xi = decay_start_max_xis[species]
                 max_khz = max_khzs[species]
                 max_xi = max_xis[species]
-                # CHANGE
-                if species == 'Human' and wf_idx == 2:
-                    max_xi = 1.0
+                # # CHANGE
+                # if species == 'Human' and wf_idx == 2:
+                #     max_xi = 1.0
                 global_max_xi = max(max_xis.values()) if const_N_pd else None
 
                 "Set filepaths"
@@ -312,10 +313,10 @@ for rho in [0.7]:
                     
                     
                         
-    # Save parameter data as xlsx
-    df = pd.DataFrame(rows)
-    N_xi_fitted_parameters_fn = rf'{fig_folder}\N_xi Fitted Parameters (rho={rho})'
-    df.to_excel(rf'{N_xi_fitted_parameters_fn}.xlsx', index=False)
+    # # Save parameter data as xlsx
+    # df = pd.DataFrame(rows)
+    # N_xi_fitted_parameters_fn = rf'{fig_folder}\N_xi Fitted Parameters (rho={rho})'
+    # df.to_excel(rf'{N_xi_fitted_parameters_fn}.xlsx', index=False)
                         
                         
             
