@@ -13,13 +13,15 @@ import pandas as pd
 # Initialize list for row dicts for xlsx file
 rows = []
 
-for rho in [0.7, 0.75, 0.65]:
+# for rho in [0.7, 0.75, 0.65]:
+for rho in [0.7]:
     for species in ['Anole', 'Owl', 'Human']:
         for wf_idx in [0, 1, 2, 3]:
             for dense_stft, const_N_pd in [(1, 1)]:
-                if species == 'Human' and wf_idx != 3:
-                    continue
                 print(f"Processing {species} {wf_idx}")
+                if species == 'Human' and wf_idx ==1:
+                    # ALSO REMOVE THE ONE BELOW CROPPING MAX XI for 2
+                    continue
                 
                 "Get waveform"
                 wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(species=species, wf_idx=wf_idx)
@@ -46,8 +48,8 @@ for rho in [0.7, 0.75, 0.65]:
                 
                 
                 # Plotting options
-                plotting_colossogram = 0
-                plotting_peak_picks = 0
+                plotting_colossogram = 1
+                plotting_peak_picks = 1
                 plotting_fits = 1
                 show_plots = 0
                 
@@ -105,6 +107,9 @@ for rho in [0.7, 0.75, 0.65]:
                 decay_start_max_xi = decay_start_max_xis[species]
                 max_khz = max_khzs[species]
                 max_xi = max_xis[species]
+                # CHANGE
+                if species == 'Human' and wf_idx == 2:
+                    max_xi = 1.0
                 global_max_xi = max(max_xis.values()) if const_N_pd else None
 
                 "Set filepaths"
@@ -168,7 +173,7 @@ for rho in [0.7, 0.75, 0.65]:
                     plt.close('all')
                     plt.figure(figsize=(15, 5))
                     plot_colossogram(coherences, f, xis, tau, max_khz=max_khz, cmap='magma')
-                    for peak_idx in peak_idxs:
+                    for peak_idx in good_peak_idxs:
                         plt.scatter(min_xi*1000 + (max_xi*1000)/50, f[peak_idx] / 1000, c='w', marker='>', label="Peak at " + f"{f[peak_idx]:0f}Hz", alpha=0.5)
                     plt.title(f"Colossogram", fontsize=18)
                     plt.suptitle(suptitle, fontsize=10)
@@ -190,7 +195,7 @@ for rho in [0.7, 0.75, 0.65]:
                     plt.subplot(2, 1, 1)
                     plt.title(rf"Colossogram Slice at $\xi={xis[xi_idx]:.3f}$")
                     plt.plot(f / 1000, coherence_slice, label=r'$C_{\xi}$, $\xi={target_xi}$')
-                    for peak_idx in peak_idxs:
+                    for peak_idx in good_peak_idxs:
                         plt.scatter(f[peak_idx] / 1000, coherence_slice[peak_idx], c='r')
                     plt.xlabel("Frequency (kHz)")
                     plt.ylabel(r'$C_{\xi}$')
@@ -199,7 +204,7 @@ for rho in [0.7, 0.75, 0.65]:
                     plt.subplot(2, 1, 2)
                     plt.title(rf"Power Spectral Density")
                     plt.plot(f / 1000, 10*np.log10(psd), label='PSD')
-                    for peak_idx in peak_idxs:
+                    for peak_idx in good_peak_idxs:
                         plt.scatter(f[peak_idx] / 1000, 10*np.log10(psd[peak_idx]), c='r')
                     plt.xlabel("Frequency (kHz)")
                     plt.ylabel("PSD [dB]")  
@@ -217,9 +222,9 @@ for rho in [0.7, 0.75, 0.65]:
                     p0 = [1, 1]
                     bounds = ([0, 0], [np.inf, A_max]) # [T, amp]
                     fit_func = exp_decay
-                    for peak_idxs, good_peaks in zip([good_peak_idxs, bad_peak_idxs], [True, False]):
+                    for good_peak_idxs, good_peaks in zip([good_peak_idxs, bad_peak_idxs], [True, False]):
                         # If there are no bad peaks, skip
-                        if len(peak_idxs) == 0:
+                        if len(good_peak_idxs) == 0:
                             if good_peaks:
                                 print("No peaks were picked!")
                             else:
@@ -229,7 +234,7 @@ for rho in [0.7, 0.75, 0.65]:
                         plt.figure(figsize=(15, 10))
                         plt.suptitle(suptitle)
 
-                        for peak_idx, color, subplot_idx in zip(peak_idxs, colors, [1, 2, 3, 4]):
+                        for peak_idx, color, subplot_idx in zip(good_peak_idxs, colors, [1, 2, 3, 4]):
                             # Pack all parameters for fit_peak together into a tuple for compactness
                             peak_fit_params = f, peak_idx, sample_hw, alpha_z, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
                             # Fit peak
@@ -294,7 +299,7 @@ for rho in [0.7, 0.75, 0.65]:
                         # Book it!
                         plt.tight_layout()
                         os.makedirs(fig_folder, exist_ok=True)
-                        fits_str = 'Fits' if good_peaks else 'Bad Fits'   
+                        fits_str = f'{fig_folder}\Fits' if good_peaks else 'Additional Figures\Bad Fits'   
                         os.makedirs(f'{fig_folder}\{fits_str}', exist_ok=True) 
                         plt.savefig(f'{fig_folder}\{fits_str}\{fn_id} ({fits_str}).png', dpi=300)
                         if show_plots:

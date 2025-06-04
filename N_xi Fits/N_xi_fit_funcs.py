@@ -170,9 +170,11 @@ def fit_peak(f, peak_idx, sample_hw, z_alpha, decay_start_max_xi, trim_step, sig
         case 2:
             fit_start_idx = maxima[1]
         case 0:
+            print(f"No peaks found in first {decay_start_max_xi*1000:.0f}ms of xi!")
             fit_start_idx = 0
         case _:
-            raise RuntimeError(f"Three or more peaks found in first {decay_start_max_xi*1000:.0f}ms of xi!")
+            print(f"Three or more peaks found in first {decay_start_max_xi*1000:.0f}ms of xi!")
+            fit_start_idx = 0
     x_to_fit = xis[fit_start_idx:decayed_idx]
     y_to_fit = target_coherence[fit_start_idx:decayed_idx]
     sigma = get_fit_sigma(y_to_fit, sigma_weighting_power) 
