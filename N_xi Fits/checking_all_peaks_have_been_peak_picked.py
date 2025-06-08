@@ -3,9 +3,9 @@ from N_xi_fit_funcs import *
 
 
 
-for species in ['Owl', 'Human', 'Anole']:
+for species in ['Anole', 'Owl', 'Human']:
     for wf_idx in range(4):
-        print(f"Checking {species} {wf_idx}")
+        # print(f"Checking {species} {wf_idx}")
         sheet_name = species if species != 'Anole' else 'Anolis'
         df = pd.read_excel(r'N_xi Fits/2024.07analysisSpreadsheetV8_RW.xlsx', sheet_name=sheet_name)
         wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(species=species, wf_idx=wf_idx) 
@@ -15,8 +15,9 @@ for species in ['Owl', 'Human', 'Anole']:
         df_wf = df[df['rootWF'].str.split(r'/').str[-1] == wf_fn].copy()
         if df_wf.empty:
             raise ValueError(f"No data for {wf_fn}!")
+        peaks=[]
         for peak_freq in good_peak_freqs:
-
+            
             # --- Step 1: Coerce 'CF' column to numeric, forcing non‐parsable strings → NaN ---
             df_wf['CF_numeric'] = pd.to_numeric(df_wf['CF'], errors='coerce')
 
@@ -70,9 +71,12 @@ for species in ['Owl', 'Human', 'Anole']:
 
 
 
-            # If you reach here, everything is OK:
-            print(f"Checking peak you chose at {peak_freq}")
-            # print(f"Closest row index: {closest_idx}")
-            print(f"CF value in that row: {row['CF']} (diff = {min_diff:.2f})")
-            # print(rf"{required_cols} are all present and numeric:")
-            # print(row[required_cols])
+            # # If you reach here, everything is OK:
+            # print(f"Checking peak you chose at {peak_freq}")
+            # # print(f"Closest row index: {closest_idx}")
+            # print(f"CF value in that row: {row['CF']} (diff = {min_diff:.2f})")
+            # # print(rf"{required_cols} are all present and numeric:")
+            # # print(row[required_cols])
+            peaks.append(row['CF'])
+        print(f"Becky peaks for {wf_fn}:")
+        print(peaks)
