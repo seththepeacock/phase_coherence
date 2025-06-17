@@ -12,11 +12,13 @@ import pandas as pd
 for end_decay_at in ['Next Min', 'Noise Floor']:
     # for rho in [0.7, 0.65, 0.75]:
     # for rho in [None, 0.6, 0.8]:
-    for rho in [-1]:
+    # for rho in [-1]:
+    for rho in [0.7]:
         # Initialize list for row dicts for xlsx file
         rows = []
-        for species in ['Anole', 'Owl', 'Human']:
-            for wf_idx in range(4):
+        # for species in ['Anole', 'Owl', 'Human']:
+        for species in ['Tokay']:
+            for wf_idx in range(1):
                 print(f"Processing {species} {wf_idx} (rho={rho})")
                 
                 
@@ -76,12 +78,14 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 max_xis = {
                     'Anole': 0.1,
                     'Owl': 0.1,
-                    'Human': 1.5
+                    'Human': 1.5,
+                    'Tokay': 0.1
                 }
                 
                 # Maximum frequency to plot (in khz)
                 max_khzs = {
                     'Anole': 6,
+                    'Tokay' : 6,
                     'Human': 10,
                     'Owl': 12
                 }
@@ -89,6 +93,7 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 # This determines where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi] 
                 decay_start_max_xis = {
                     'Anole' : 0.02,
+                    'Tokay' : 0.02,
                     'Owl' : 0.02,
                     'Human' : 0.2
                 }
@@ -97,6 +102,7 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 # This is how many standard deviations away from the mean to set the noise floor
                 noise_floor_bw_factors = {
                     'Anole' : 1,
+                    'Tokay' : 1,
                     'Owl' : 1,
                     'Human' : 2
                 }
@@ -116,8 +122,15 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 wf = spectral_filter(wf, fs, hpf_cutoff_freq, type='hp')
                 
                 # Crop to desired length
-                wf_length = 30 if dense_stft else 60                  
-                wf = wf[:int(wf_length*fs)]
+                wf_length = 30 if dense_stft else 60
+                wf_lengthS = round(wf_length*fs)
+                og_length = len(wf)
+                if og_length < wf_lengthS:
+                    raise ValueError(f"Waveform is less than {wf_length}s long!")
+                # Start index for the middle chunk
+                start = max(0, (og_length - wf_length) // 2)
+                wf = wf[start:start+wf_lengthS]
+                
 
                 "Set filepaths"
                 fn_id = rf"{species} {wf_idx}, const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"

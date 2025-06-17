@@ -21,7 +21,7 @@ for species in ['Tokay']:
         
         # Crop to desired length
         wf_length = 30                
-        wf = wf[:int(wf_length*fs)]
+        wf = wf[:int(wf_length*fs)] if species != 'Tokay' else wf[int(len(wf)/2):int(len(wf)/2)+int(wf_length*fs)] # use middle of the waveform for tokay data
         
         "PARAMETERS"
         tau = 2**13 / 44100 # Everyone uses the same tau
@@ -29,6 +29,7 @@ for species in ['Tokay']:
         
         max_khzs = {
                         'Anole': 6,
+                        'Tokay': 6,
                         'Human': 10,
                         'Owl': 12
                     }

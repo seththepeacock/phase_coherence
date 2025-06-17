@@ -91,8 +91,11 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             seth_good_peak_freqs = [904, 1518, 2040, 2697]
             becky_good_peak_freqs = [904, 1518, 2040, 2697]
             bad_peak_freqs = []
-        
-    return wf, wf_fn, fs, np.array(becky_good_peak_freqs), np.array(bad_peak_freqs)
+    if species != 'Tokay':
+        good_peak_freqs = becky_good_peak_freqs
+    else:
+        good_peak_freqs = seth_good_peak_freqs
+    return wf, wf_fn, fs, np.array(good_peak_freqs), np.array(bad_peak_freqs)
         
 def get_fn(species, idx):
     match species:
