@@ -15,8 +15,8 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
     # print("WF file name:", wf_fn)
     # Load matlab file
     N_xi_folder = r'N_xi Fits/'
-    wf_folder = N_xi_folder + r'Waveforms/'
-    wf = sio.loadmat(wf_folder + wf_fn)['wf'][:, 0]
+    data_folder = N_xi_folder + r'Data/'
+    wf = sio.loadmat(data_folder + wf_fn)['wf'][:, 0]
     # Get fs
     if wf_fn in ['Owl2R1.mat', 'Owl7L1.mat']:
         fs = 48000
@@ -42,6 +42,20 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             becky_good_peak_freqs = [1798, 2143, 2406, 2778]
             bad_peak_freqs = []
             
+        # Tokays
+        case 'tokay_GG1rearSOAEwf.mat': #0
+            seth_good_peak_freqs = []
+            bad_peak_freqs = []
+        case 'tokay_GG2rearSOAEwf.mat': #1
+            seth_good_peak_freqs = []
+            bad_peak_freqs = []
+        case 'tokay_GG3rearSOAEwf.mat': #2
+            seth_good_peak_freqs = []
+            bad_peak_freqs = []
+        case 'tokay_GG4rearSOAEwf.mat': #3
+            seth_good_peak_freqs = []
+            bad_peak_freqs = []
+            
         # Owls
         case 'Owl2R1.mat': #0
             seth_good_peak_freqs = [4355, 7451, 8458, 9039]
@@ -63,16 +77,16 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
         # Humans
         case 'ALrearSOAEwf1.mat': #0
             seth_good_peak_freqs = [2665, 2945, 3219, 3865]
-            becky_good_peak_freqs = [980, 2805, 2945, 3865]
-            bad_peak_freqs = [904, 2659, 3219]
+            becky_good_peak_freqs = [2805, 2945, 3865]
+            bad_peak_freqs = [904, 980, 2659, 3219]
         case 'JIrearSOAEwf2.mat': #1
             seth_good_peak_freqs = [2342, 3402, 8312, 8678]
             becky_good_peak_freqs = [2342, 3402, 4048, 5841]
             bad_peak_freqs = [8312, 8678]
         case 'LSrearSOAEwf1.mat': #2
             seth_good_peak_freqs = [732, 985, 1637, 2229]
-            becky_good_peak_freqs = [732, 985, 1637, 2230]
-            bad_peak_freqs = [3122]
+            becky_good_peak_freqs = [732, 985, 2230]
+            bad_peak_freqs = [1637, 3122]
         case 'TH13RearwaveformSOAE.mat': #3
             seth_good_peak_freqs = [904, 1518, 2040, 2697]
             becky_good_peak_freqs = [904, 1518, 2040, 2697]
@@ -92,6 +106,9 @@ def get_fn(species, idx):
                     return 'ACsb24rearSOAEwfA1.mat'
                 case 3:
                     return 'ACsb30learSOAEwfA2.mat'
+        case 'Tokay':
+            return f'tokay_GG{idx+1}rearSOAEwf.mat'
+
         case 'Human':
             match idx:
                 case 0:
@@ -113,13 +130,13 @@ def get_fn(species, idx):
                 case 3:
                     return 'TAG9rearSOAEwf2.mat'
         case _:
-            raise ValueError("Species must be 'Anole', 'Human', or 'Owl'!")
+            raise ValueError("Species must be 'Anole', 'Human', 'Tokay', or 'Owl'!")
 
 def get_is_signal(coherences, f, xis, f_peak_idx, f_noise=0, noise_floor_bw_factor=None):
     if noise_floor_bw_factor is None:
         raise ValueError("You must input noise_floor_bw_factor!")
     # Get the coherence slice we care about
-    target_coherences=coherences[f_peak_idx, :]
+    target_coherence=coherences[f_peak_idx, :]
     # find frequency bin index closest to our cutoff (NOW JUST 0)
     f_noise_idx = (np.abs(f - f_noise)).argmin()  
     # Get mean and std dev of coherence (over frequency axis, axis=0) for each xi value (using ALL frequencies)
@@ -138,12 +155,12 @@ def get_is_signal(coherences, f, xis, f_peak_idx, f_noise=0, noise_floor_bw_fact
         is_signal[xi_idx] = coherence_value > noise_floor_upper_limit
 
     
-    return is_signal, target_coherences, noise_means, noise_stds
+    return is_signal, target_coherence, noise_means, noise_stds
 
 def exp_decay(x, T, amp):
     return amp * np.exp(-x/T)
 
-def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho):
+def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho, end_decay_at):
     
     if sigma_weighting_power == 0:
         get_fit_sigma = lambda y, sigma_weighting_power: np.ones(len(y))
@@ -158,11 +175,11 @@ def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step
     
     # Find where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi] 
     decay_start_max_xi_idx = np.argmin(np.abs(xis-decay_start_max_xi))
-    maxima = find_peaks(target_coherence[:decay_start_max_xi_idx], prominence=0.05)[0]
+    maxima = find_peaks(target_coherence[:decay_start_max_xi_idx], prominence=0.01)[0]
     num_maxima = len(maxima)
     match num_maxima:
         case 1:
-            # print(f"One peak found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit here")
+            print(f"One peak found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit here")
             decay_start_idx = maxima[0]
         case 2:
             print(f"Two peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at second one!")
@@ -184,13 +201,16 @@ def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step
         print(f"Signal at {freq:.0f}Hz never decays!")
 
     # Find all minima after the dip below the noise floor
-    minima = find_peaks(-target_coherence[dip_below_noise_floor_idx:])[0]
-    if len(minima) == 0:
-        # If no minima, just set decayed_idx to the dip below noise floor
+    if end_decay_at == 'Next Min':
+        minima = find_peaks(-target_coherence[dip_below_noise_floor_idx:])[0]
+        if len(minima) == 0:
+            # If no minima, just set decayed_idx to the dip below noise floor
+            decayed_idx = dip_below_noise_floor_idx
+        else:
+            # If there are minima, take the first one after the dip below noise floor
+            decayed_idx = dip_below_noise_floor_idx + minima[0]
+    else: 
         decayed_idx = dip_below_noise_floor_idx
-    else:
-        # If there are minima, take the first one after the dip below noise floor
-        decayed_idx = dip_below_noise_floor_idx + minima[0]
         
     
     # Curve Fit
@@ -243,7 +263,7 @@ def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step
     return T, T_std, A, A_std, mse, is_signal, is_noise, decay_start_idx, decayed_idx, target_coherence, xis_fit_crop, fitted_exp_decay, noise_means, noise_stds
 
 def get_spreadsheet_df(wf_fn, species):
-    df = pd.read_excel(r'N_xi Fits/2024.07analysisSpreadsheetV8_RW.xlsx', sheet_name=species if species != 'Anole' else 'Anolis')
+    df = pd.read_excel(r'N_xi Fits/Data/2024.07analysisSpreadsheetV8_RW.xlsx', sheet_name=species if species != 'Anole' else 'Anolis')
     df.iloc[0]
     if wf_fn == 'TAG9rearSOAEwf2.mat': # This one has trailing whitespace in Becky's excel sheet
         wf_fn += ' '

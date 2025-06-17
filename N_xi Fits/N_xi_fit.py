@@ -9,38 +9,20 @@ import matplotlib.patheffects as pe
 from tqdm import tqdm
 from collections import defaultdict
 import pandas as pd
-
-
-# for rho in [0.7, 0.75, 0.65]:
-for rho in [0.7, 0.75, 0.65]:
-    # Initialize list for row dicts for xlsx file
-    rows = []
-    for species in ['Anole', 'Owl', 'Human']:
-        # for wf_idx in [0, 1, 2, 3, 4]:
-        for wf_idx in range(4):
-            for dense_stft, const_N_pd in [(1, 1)]:
-                long_lizard=False
-                if wf_idx==4:
-                    if species=='Anole':
-                        wf_idx=0
-                        long_lizard=True
-                    else:
-                        continue
-                if rho != 0.7 and species == 'Human' and wf_idx != 0:
-                   continue
-                print(f"Processing {species} {wf_idx}")
+for end_decay_at in ['Next Min', 'Noise Floor']:
+    # for rho in [0.7, 0.65, 0.75]:
+    # for rho in [None, 0.6, 0.8]:
+    for rho in [-1]:
+        # Initialize list for row dicts for xlsx file
+        rows = []
+        for species in ['Anole', 'Owl', 'Human']:
+            for wf_idx in range(4):
+                print(f"Processing {species} {wf_idx} (rho={rho})")
                 
                 
                 "Get waveform"
                 wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(species=species, wf_idx=wf_idx)
-                
-                # Apply a high pass filter
-                hpf_cutoff_freq = 300
-                wf = spectral_filter(wf, fs, hpf_cutoff_freq, type='hp')
-                
-                # Crop to desired length
-                wf_length = 30 if dense_stft else 60                  
-                wf = wf[:int(wf_length*fs)]
+            
                 
                 "PARAMETERS"
                 # Coherence Parameters
@@ -53,12 +35,15 @@ for rho in [0.7, 0.75, 0.65]:
                 # skip_min_xi = True if (dense_stft, const_N_pd) == (0, 0) else False
                 skip_min_xi = False
                 force_recalc_coherences = 0
+                dense_stft = 1
+                const_N_pd = 1
                 
                 
-                # Plotting options
-                plotting_colossogram = 1
-                plotting_peak_picks = 1
-                plotting_fits = 1
+                # Output options
+                output_colossogram = 0
+                output_peak_picks = 0
+                output_fits = 1
+                output_spreadsheet = 1
                 show_plots = 0
             
                 
@@ -116,17 +101,23 @@ for rho in [0.7, 0.75, 0.65]:
                     'Human' : 2
                 }
                     
-                
+                # Get species-specific params
 
                 decay_start_max_xi = decay_start_max_xis[species]
                 max_khz = max_khzs[species]
                 max_xi = max_xis[species]
                 noise_floor_bw_factor = noise_floor_bw_factors[species]
                 
-                if long_lizard:
-                    max_xi=1.5
 
                 global_max_xi = max(max_xis.values()) if const_N_pd else None
+                
+                # Apply a high pass filter
+                hpf_cutoff_freq = 300
+                wf = spectral_filter(wf, fs, hpf_cutoff_freq, type='hp')
+                
+                # Crop to desired length
+                wf_length = 30 if dense_stft else 60                  
+                wf = wf[:int(wf_length*fs)]
 
                 "Set filepaths"
                 fn_id = rf"{species} {wf_idx}, const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
@@ -134,8 +125,9 @@ for rho in [0.7, 0.75, 0.65]:
                 pkl_fn = f'{fn_id} (Coherences)'
                 N_xi_folder = r'N_xi Fits/'
                 pkl_folder = N_xi_folder + r'Pickles/'
-                results_folder = N_xi_folder + rf'Results (rho={rho})/' if not long_lizard else N_xi_folder + rf'Additional Figures/Long Lizard'
-
+                results_folder = N_xi_folder + rf'Results (rho={rho})/' 
+                all_results_folder = N_xi_folder + rf'Results (All rho)/'
+                
                 "Calculate things"
                 # Raise warning if tauS is not a power of two AND the samplerate is indeed 44100
                 if np.log2(tauS) != int(np.log2(tauS)) and fs == 44100:
@@ -185,7 +177,7 @@ for rho in [0.7, 0.75, 0.65]:
                     suptitle += f'   [Dense STFT ({seg_spacing*1000}ms)]'
                 
                 
-                if plotting_colossogram:
+                if output_colossogram:
                     print("Plotting Colossogram")
                     plt.close('all')
                     plt.figure(figsize=(15, 5))
@@ -194,12 +186,13 @@ for rho in [0.7, 0.75, 0.65]:
                         plt.scatter(min_xi*1000 + (max_xi*1000)/50, f[peak_idx] / 1000, c='w', marker='>', label="Peak at " + f"{f[peak_idx]:0f}Hz", alpha=0.5)
                     plt.title(f"Colossogram", fontsize=18)
                     plt.suptitle(suptitle, fontsize=10)
-                    os.makedirs(f'{results_folder}\Colossograms', exist_ok=True)
-                    plt.savefig(f'{results_folder}\Colossograms\{fn_id} (Colossogram).png', dpi=300)
+                    for folder in [results_folder, all_results_folder]:
+                        os.makedirs(f'{folder}\Colossograms', exist_ok=True)
+                        plt.savefig(f'{folder}\Colossograms\{fn_id} (Colossogram).png', dpi=300)
                     if show_plots:
                         plt.show()
                         
-                if plotting_peak_picks:
+                if output_peak_picks:
                     print("Plotting Peak Picks")
                     target_xi = 0.01
                     xi_idx = np.argmin(np.abs(xis - target_xi))
@@ -228,13 +221,11 @@ for rho in [0.7, 0.75, 0.65]:
                     plt.legend()
                     plt.xlim(0, max_khz)
                     plt.tight_layout()
-                    os.makedirs(f'{results_folder}\Peak Picks', exist_ok=True)
-                    plt.savefig(f'{results_folder}\Peak Picks\{fn_id} (Peak Picks).png', dpi=300)
                     if show_plots:
                         plt.show()
                     
                 "FITTING"
-                if plotting_fits:
+                if output_fits:
                     print(f"Fitting {wf_fn}")
                     df = get_spreadsheet_df(wf_fn, species)
                     
@@ -249,12 +240,16 @@ for rho in [0.7, 0.75, 0.65]:
                             else:
                                 continue
                         
+                        if not good_peaks:
+                            print("Now fitting bad peaks...")
+                        
                         plt.close('all')
                         plt.figure(figsize=(15, 10))
+                        plt.suptitle(suptitle)
 
                         for peak_freq, peak_idx, color, subplot_idx in zip(peak_freqs, peak_idxs, colors, [1, 2, 3, 4]):
                             # Pack all parameters for fit_peak together into a tuple for compactness
-                            peak_fit_params = f, peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho
+                            peak_fit_params = f, peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho, end_decay_at
                             
                             # Fit peak
                             T, T_std, A, A_std, mse, is_signal, is_noise, decay_start_idx, decayed_idx, target_coherence, xis_fit_crop, fitted_exp_decay, noise_means, noise_stds = fit_peak(*peak_fit_params)
@@ -283,7 +278,7 @@ for rho in [0.7, 0.75, 0.65]:
                                     fit_label = ""
                                     print("One or more params is infinite!")
                                 plt.plot(xis_fit_crop_num_cycles, fitted_exp_decay, color=color, label=fit_label, lw=lw_fit, path_effects=pe_stroke_fit, alpha=alpha_fit, zorder=2)
-       
+
 
                             # Plot the coherence
                             plt.scatter(xis_num_cycles[is_signal], target_coherence[is_signal], s=s_signal, edgecolors=edgecolor_signal, marker=marker_signal, color=color, zorder=1, label='Above Noise Floor')
@@ -304,7 +299,7 @@ for rho in [0.7, 0.75, 0.65]:
                                 noise_target_idx = np.argmin(np.abs(f-noise_freq))
                                 # plt.scatter(xis_num_cycles, coherences[noise_target_idx, :], label=f'Noise Bin ({noise_freq/1000:.0f}kHz)', s=1, color=colors[5])
                                 plt.plot(xis_num_cycles, coherences[noise_target_idx, :], label=f'Noise Bin ({noise_freq/1000:.0f}kHz)', color=colors[5])
-                            
+
                             # Finish plot
                             plt.xlabel(r'# Cycles')
                             plt.ylabel(r'$C_{\xi}$')           
@@ -312,7 +307,7 @@ for rho in [0.7, 0.75, 0.65]:
                             plt.legend()
                             
                             # Add params to a row dict
-                            if good_peaks and not long_lizard:
+                            if good_peaks and output_spreadsheet:
                                 SNRfit, fwhm = get_params_from_df(df, peak_freq)
                                 rows.append({
                                     'Species':species,
@@ -334,21 +329,22 @@ for rho in [0.7, 0.75, 0.65]:
                         plt.tight_layout()
                         os.makedirs(results_folder, exist_ok=True)
                         # fits_folder = f'{fig_folder}' if good_peaks else 'Additional Figures'
-                        fits_str = f'Fits' if good_peaks else 'Bad Fits'   
-                        os.makedirs(f'{results_folder}\{fits_str}', exist_ok=True) 
-                        plt.savefig(f'{results_folder}\{fits_str}\{fn_id} ({fits_str}).png', dpi=300)
+                        fits_str = f'Fits' if good_peaks else 'Bad Fits'
+                        for folder in [results_folder, all_results_folder]:   
+                            os.makedirs(f'{folder}\{fits_str}', exist_ok=True) 
+                            plt.savefig(rf'{folder}\{fits_str}\{fn_id} ({fits_str}, End Decay at {end_decay_at}).png', dpi=300)
                         if show_plots:
                             plt.show()
                         
-                    
-                    
-                    
-                    
-                        
-    # Save parameter data as xlsx
-    df = pd.DataFrame(rows)
-    N_xi_fitted_parameters_fn = rf'{results_folder}\N_xi Fitted Parameters (rho={rho})'
-    df.to_excel(rf'{N_xi_fitted_parameters_fn}.xlsx', index=False)
                         
                         
-            
+                        
+                        
+        if output_spreadsheet:
+            # Save parameter data as xlsx
+            df_fitted_params = pd.DataFrame(rows)
+            N_xi_fitted_parameters_fn = rf'{results_folder}\N_xi Fitted Parameters (rho={rho}, End Decay at {end_decay_at})'
+            df_fitted_params.to_excel(rf'{N_xi_fitted_parameters_fn}.xlsx', index=False)
+                            
+                            
+        print("Done!")

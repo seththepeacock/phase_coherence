@@ -6,7 +6,7 @@ from phaseco import *
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 
-for species in ['Anole', 'Human', 'Owl']:
+for species in ['Tokay']:
     for wf_idx in [0, 1, 2, 3]:
         print(f"Processing {species} {wf_idx}")
         
@@ -50,6 +50,15 @@ for species in ['Anole', 'Human', 'Owl']:
                 peak_guesses = [1811, 2177, 3109, 3486]
             case 'ACsb30learSOAEwfA2.mat': #3
                 peak_guesses = [1800, 2139, 2401, 2774]
+            # Tokays
+            case 'tokay_GG1rearSOAEwf.mat':
+                peak_guesses = []
+            case 'tokay_GG2rearSOAEwf.mat':
+                peak_guesses = []
+            case 'tokay_GG3rearSOAEwf.mat':
+                peak_guesses = []
+            case 'tokay_GG4rearSOAEwf.mat':
+                peak_guesses = []
             # Humans
             case 'ALrearSOAEwf1.mat': #0
                 peak_guesses = [2660, 2940, 3220, 3870]
