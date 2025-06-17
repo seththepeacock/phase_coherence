@@ -122,8 +122,8 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 wf = spectral_filter(wf, fs, hpf_cutoff_freq, type='hp')
                 
                 # Crop to desired length
-                wf_length = 30 if dense_stft else 60                  
-                wf = wf[:int(wf_length*fs)]
+                wf_length = 30 if dense_stft else 60
+                wf = crop_wf(wf, fs, wf_length, species)
 
                 "Set filepaths"
                 fn_id = rf"{species} {wf_idx}, const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
@@ -233,7 +233,8 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 "FITTING"
                 if output_fits:
                     print(f"Fitting {wf_fn}")
-                    df = get_spreadsheet_df(wf_fn, species)
+                    if species != 'Tokay':
+                        df = get_spreadsheet_df(wf_fn, species)
                     
                     p0 = [1, 1]
                     bounds = ([0, 0], [np.inf, A_max]) # [T, amp]
@@ -314,7 +315,7 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                             
                             # Add params to a row dict
                             if good_peaks and output_spreadsheet:
-                                SNRfit, fwhm = get_params_from_df(df, peak_freq)
+
                                 rows.append({
                                     'Species':species,
                                     'WF Index':wf_idx,
@@ -326,10 +327,14 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                                     'T_std':T_std,
                                     'A':A,
                                     'A_std':A_std,
-                                    'MSE':mse,
-                                    'SNRfit':SNRfit,
-                                    'FWHM':fwhm
+                                    'MSE':mse
                                 })
+                                if species != 'Tokay':
+                                    SNRfit, fwhm = get_params_from_df(df, peak_freq)
+                                    rows.append({
+                                        'SNRfit':SNRfit,
+                                        'FWHM':fwhm
+                                    })
                             
                         # Book it!
                         plt.tight_layout()
@@ -475,8 +480,8 @@ for end_decay_at in ['Noise Floor']:
                 wf = spectral_filter(wf, fs, hpf_cutoff_freq, type='hp')
                 
                 # Crop to desired length
-                wf_length = 30 if dense_stft else 60                  
-                wf = wf[:int(wf_length*fs)]
+                wf_length = 30 if dense_stft else 60
+                wf = crop_wf(wf, fs, wf_length, species)
 
                 "Set filepaths"
                 fn_id = rf"{species} {wf_idx}, const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
@@ -585,7 +590,8 @@ for end_decay_at in ['Noise Floor']:
                 "FITTING"
                 if output_fits:
                     print(f"Fitting {wf_fn}")
-                    df = get_spreadsheet_df(wf_fn, species)
+                    if species != 'Tokay':
+                        df = get_spreadsheet_df(wf_fn, species)
                     
                     p0 = [1, 1]
                     bounds = ([0, 0], [np.inf, A_max]) # [T, amp]
@@ -826,8 +832,8 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 wf = spectral_filter(wf, fs, hpf_cutoff_freq, type='hp')
                 
                 # Crop to desired length
-                wf_length = 30 if dense_stft else 60                  
-                wf = wf[:int(wf_length*fs)]
+                wf_length = 30 if dense_stft else 60
+                wf = crop_wf(wf, fs, wf_length, species)
 
                 "Set filepaths"
                 fn_id = rf"{species} {wf_idx}, const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_length}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"

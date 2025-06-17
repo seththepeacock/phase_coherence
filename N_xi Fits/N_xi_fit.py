@@ -123,13 +123,9 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 
                 # Crop to desired length
                 wf_length = 30 if dense_stft else 60
-                wf_lengthS = round(wf_length*fs)
-                og_length = len(wf)
-                if og_length < wf_lengthS:
-                    raise ValueError(f"Waveform is less than {wf_length}s long!")
-                # Start index for the middle chunk
-                start = max(0, (og_length - wf_length) // 2)
-                wf = wf[start:start+wf_lengthS]
+                wf = crop_wf(wf, fs, wf_length, species)
+                
+            
                 
 
                 "Set filepaths"
@@ -240,7 +236,9 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 "FITTING"
                 if output_fits:
                     print(f"Fitting {wf_fn}")
-                    df = get_spreadsheet_df(wf_fn, species)
+                    # Get becky's dataframe
+                    if species != 'Tokay':
+                        df = get_spreadsheet_df(wf_fn, species)
                     
                     p0 = [1, 1]
                     bounds = ([0, 0], [np.inf, A_max]) # [T, amp]
@@ -321,7 +319,7 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                             
                             # Add params to a row dict
                             if good_peaks and output_spreadsheet:
-                                SNRfit, fwhm = get_params_from_df(df, peak_freq)
+
                                 rows.append({
                                     'Species':species,
                                     'WF Index':wf_idx,
@@ -333,10 +331,14 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                                     'T_std':T_std,
                                     'A':A,
                                     'A_std':A_std,
-                                    'MSE':mse,
-                                    'SNRfit':SNRfit,
-                                    'FWHM':fwhm
+                                    'MSE':mse
                                 })
+                                if species != 'Tokay':
+                                    SNRfit, fwhm = get_params_from_df(df, peak_freq)
+                                    rows.append({
+                                        'SNRfit':SNRfit,
+                                        'FWHM':fwhm
+                                    })
                             
                         # Book it!
                         plt.tight_layout()

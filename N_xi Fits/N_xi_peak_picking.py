@@ -4,7 +4,7 @@ import os
 import phaseco as pc
 from phaseco import *
 import matplotlib.pyplot as plt
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, peak_prominences
 
 for species in ['Tokay']:
     for wf_idx in [0, 1, 2, 3]:
@@ -13,7 +13,7 @@ for species in ['Tokay']:
         "Get waveform"
         wf, wf_fn, fs, peak_guesses, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
         
-        plot = 0
+        plot = 1
         
         # Apply a high pass filter
         hpf_cutoff_freq = 300
@@ -21,7 +21,7 @@ for species in ['Tokay']:
         
         # Crop to desired length
         wf_length = 30                
-        wf = wf[:int(wf_length*fs)] if species != 'Tokay' else wf[int(len(wf)/2):int(len(wf)/2)+int(wf_length*fs)] # use middle of the waveform for tokay data
+        wf = crop_wf(wf, fs, wf_length, species)
         
         "PARAMETERS"
         tau = 2**13 / 44100 # Everyone uses the same tau
@@ -53,13 +53,13 @@ for species in ['Tokay']:
                 peak_guesses = [1800, 2139, 2401, 2774]
             # Tokays
             case 'tokay_GG1rearSOAEwf.mat':
-                peak_guesses = []
+                peak_guesses = [1187, 1570, 3218, 3720]
             case 'tokay_GG2rearSOAEwf.mat':
-                peak_guesses = []
+                peak_guesses = [1200, 1560, 3180, 3870]
             case 'tokay_GG3rearSOAEwf.mat':
-                peak_guesses = []
+                peak_guesses = [1115, 1620, 2270, 3149]
             case 'tokay_GG4rearSOAEwf.mat':
-                peak_guesses = []
+                peak_guesses = [1100, 2288, 2840, 3160]
             # Humans
             case 'ALrearSOAEwf1.mat': #0
                 peak_guesses = [2660, 2940, 3220, 3870]
@@ -82,18 +82,30 @@ for species in ['Tokay']:
         
         peak_indices, _ = find_peaks(10*np.log10(psd), prominence=2)
         
+
+        # # Inspect prominence values of detected peaks
+        # prominences = peak_prominences(10*np.log10(psd), peak_indices)[0]
+
+        # # Print them out
+        # for i, prom in zip(peak_indices, prominences):
+        #     print(f"Peak at f={f[i]:.1f} Hz has prominence {prom:.2f} dB")
+
+        
         picked_peaks = []
         for peak_guess in peak_guesses:
+            # Start a list with length > 2 to enter a while loop
             selected_index = [0, 0]
             bw = 50
             while len(selected_index) > 1:
                 band = [peak_guess - bw, peak_guess + bw]
                 # Select peaks within the frequency band
                 band_mask = (f[peak_indices] >= band[0]) & (f[peak_indices] <= band[1])
+                # Get all peaks within the frequency band
                 selected_index = peak_indices[band_mask]
+                # Narrow down the bandwidth until there is only one peak
                 bw = bw - 1
                 if bw == 0:
-                    raise ValueError("No nearby peaks!")
+                    raise ValueError("No nearby peaks -- bad guess?!")
             peak = f[selected_index[0]]
             picked_peaks.append(peak)
     

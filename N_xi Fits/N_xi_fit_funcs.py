@@ -16,7 +16,11 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
     # Load matlab file
     N_xi_folder = r'N_xi Fits/'
     data_folder = N_xi_folder + r'Data/'
-    wf = sio.loadmat(data_folder + wf_fn)['wf'][:, 0]
+    if species == 'Tokay':
+        wf = sio.loadmat(data_folder + wf_fn)['wf'][0]
+    else:
+        wf = sio.loadmat(data_folder + wf_fn)['wf'][:, 0]
+        
     # Get fs
     if wf_fn in ['Owl2R1.mat', 'Owl7L1.mat']:
         fs = 48000
@@ -44,16 +48,16 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             
         # Tokays
         case 'tokay_GG1rearSOAEwf.mat': #0
-            seth_good_peak_freqs = []
+            seth_good_peak_freqs = [1184, 1572, 3214, 3714]
             bad_peak_freqs = []
         case 'tokay_GG2rearSOAEwf.mat': #1
-            seth_good_peak_freqs = []
+            seth_good_peak_freqs = [1195, 1567, 3176, 3876]
             bad_peak_freqs = []
         case 'tokay_GG3rearSOAEwf.mat': #2
-            seth_good_peak_freqs = []
+            seth_good_peak_freqs = [1109, 1620, 2266, 3133]
             bad_peak_freqs = []
         case 'tokay_GG4rearSOAEwf.mat': #3
-            seth_good_peak_freqs = []
+            seth_good_peak_freqs = [1104, 2288, 2837, 3160]
             bad_peak_freqs = []
             
         # Owls
@@ -96,6 +100,19 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
     else:
         good_peak_freqs = seth_good_peak_freqs
     return wf, wf_fn, fs, np.array(good_peak_freqs), np.array(bad_peak_freqs)
+
+def crop_wf(wf, fs, wf_length, species):
+    if species == 'Tokay':
+        wf_lengthS = round(wf_length*fs)
+        og_length = len(wf)
+        if og_length < wf_lengthS:
+            raise ValueError(f"Waveform is less than {wf_length}s long!")
+        # Start index for the middle chunk
+        start = max(0, (og_length - wf_length) // 2)
+        wf = wf[start:start+wf_lengthS]
+    else: # Just keeping it this way for consistency (it shouldn't matter), will do oeverything the Tokay way if/when we do the final recalc
+        wf = wf[:int(wf_length*fs)]
+    return wf
         
 def get_fn(species, idx):
     match species:
