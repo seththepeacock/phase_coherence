@@ -121,7 +121,7 @@ def get_stft(wf, fs, tau=None, tauS=None, seg_spacing=None, xi=None, rho=None, w
         Shifts each time-domain window of the fft with fftshift() to center your window in time and make it zero-phase (no effect on coherence)
       return_dict: bool, Optional
         Returns a dict with:
-        d["freq_ax"] = freq_ax
+        d["f"] = f
         d["stft"] = stft
         d["segmented_wf"] = segmented_wf
         d["seg_start_indices"] = seg_start_indices
@@ -222,8 +222,8 @@ def get_stft(wf, fs, tau=None, tauS=None, seg_spacing=None, xi=None, rho=None, w
   # Now we do the ffts!
 
   # Get frequency axis 
-  freq_ax = rfftfreq(tauS, delta_t)
-  N_bins = len(freq_ax)
+  f = rfftfreq(tauS, delta_t)
+  N_bins = len(f)
   
   # initialize segmented fft array
   stft = np.zeros((N_segs, N_bins), dtype=complex)
@@ -235,7 +235,7 @@ def get_stft(wf, fs, tau=None, tauS=None, seg_spacing=None, xi=None, rho=None, w
   if return_dict:
     
     return {
-      "freq_ax" : freq_ax,  
+      "f" : f,  
       "stft" : stft,
       "seg_start_indices" : seg_start_indices,
       "segmented_wf" : segmented_wf,
@@ -248,7 +248,7 @@ def get_stft(wf, fs, tau=None, tauS=None, seg_spacing=None, xi=None, rho=None, w
       }
     
   else: 
-    return freq_ax, stft
+    return f, stft
   
   
 def get_coherence(wf, fs, xi, tau=None, tauS=None, seg_spacing=None, rho=None, win_type='boxcar', N_segs=None, reuse_stft=None, ref_type="next_seg", cutoff_freq=None, freq_bin_hop=1, return_avg_abs_phase_diffs=False, return_dict=False):
@@ -282,7 +282,7 @@ def get_coherence(wf, fs, xi, tau=None, tauS=None, seg_spacing=None, rho=None, w
         How many bins over to reference phase against for next_freq
       return_dict: bool, Optional
         Defaults to only returning the coherence; if this is enabled, then a dictionary is returned with keys:
-        d["freq_ax"] = freq_ax
+        d["f"] = f
         d["coherence"] = coherence
         d["phases"] = phases
         d["phase_diffs"] = phase_diffs
@@ -306,13 +306,13 @@ def get_coherence(wf, fs, xi, tau=None, tauS=None, seg_spacing=None, rho=None, w
   
 
   # Retrieve necessary items from dictionary
-  freq_ax = stft_dict["freq_ax"]
+  f = stft_dict["f"]
   stft = stft_dict["stft"]
   seg_spacing = stft_dict["seg_spacing"]
   
   
   # Make sure these are valid
-  if stft.shape[1] != freq_ax.shape[0]:
+  if stft.shape[1] != f.shape[0]:
     raise Exception("STFT and frequency axis don't match!")
   
   # Handle errors from incorrect passing of tau/tauS in case they weren't caught in OG stft calculation
@@ -358,8 +358,8 @@ def get_coherence(wf, fs, xi, tau=None, tauS=None, seg_spacing=None, rho=None, w
       
     # initialize array for phase diffs; -freq_bin_hop is because we won't be able to get it for the #(freq_bin_hop) freqs
     phase_diffs = np.zeros((N_segs, N_bins - freq_bin_hop))
-    # we'll also need to take the last #(freq_bin_hop) bins off the freq_ax
-    freq_ax = freq_ax[0:-freq_bin_hop]
+    # we'll also need to take the last #(freq_bin_hop) bins off the f
+    f = f[0:-freq_bin_hop]
     
     # calc phase diffs
     for seg in range(N_segs):
@@ -371,8 +371,8 @@ def get_coherence(wf, fs, xi, tau=None, tauS=None, seg_spacing=None, rho=None, w
     
     # Since this references each frequency bin to its adjacent neighbor, we'll plot them w.r.t. the average frequency 
         # this corresponds to shifting everything over half a bin width (bin width is 1/tau)
-    bin_width = freq_ax[1] - freq_ax[0]
-    freq_ax = freq_ax + (bin_width / 2)
+    bin_width = f[1] - f[0]
+    f = f + (bin_width / 2)
     
   
   # or we can reference it against the phase of both the lower and higher frequencies in the same window
@@ -383,7 +383,7 @@ def get_coherence(wf, fs, xi, tau=None, tauS=None, seg_spacing=None, rho=None, w
     pd_low = np.zeros((N_segs, N_bins - 2))
     pd_high = np.zeros((N_segs, N_bins - 2))
     # take the first and last bin off the freq ax
-    freq_ax = freq_ax[1:-1]
+    f = f[1:-1]
     
     # calc phase diffs
     for seg in range(N_segs):
@@ -403,16 +403,17 @@ def get_coherence(wf, fs, xi, tau=None, tauS=None, seg_spacing=None, rho=None, w
     raise Exception("You didn't input a valid ref_type!")
   
   if not return_dict:
-    return freq_ax, coherence
+    return f, coherence
   
   else: # Return full dictionary
+    
     d = {
       "coherence": coherence,
       "phases" : phases,
       "phase_diffs" : phase_diffs,
       "avg_vector_angle" : avg_vector_angle,
-      "N_segs" : N_segs,
-      "freq_ax" : freq_ax,
+      "N_pd" : N_pd,
+      "f" : f,
       "stft" : stft,
       "stft_dict" : stft_dict,
       "tau" : tau,
@@ -606,20 +607,20 @@ def get_welch(wf, fs, tau=None, tauS=None, seg_spacing=None, N_segs=None, win_ty
       scaling: String, Optional
         "mags" (magnitudes) or "density" (PSD) or "spectrum" (power spectrum)
       reuse_stft: tuple, Optional
-        If you want to avoid recalculating the segmented fft, pass it in here along with the frequency axis as (freq_ax, stft)
+        If you want to avoid recalculating the segmented fft, pass it in here along with the frequency axis as (f, stft)
       return_dict: bool, Optional
         Returns a dict with:
-        d["freq_ax"] = freq_ax
+        d["f"] = f
         d["spectrum"] = spectrum
         d["segmented_spectrum"] = segmented_spectrum
   """
   # if nothing was passed into reuse_stft then we need to recalculate it
   if reuse_stft is None:
-    freq_ax, stft = get_stft(wf=wf, fs=fs, tau=tau, tauS=tauS, seg_spacing=seg_spacing, N_segs=N_segs, win_type=win_type)
+    f, stft = get_stft(wf=wf, fs=fs, tau=tau, tauS=tauS, seg_spacing=seg_spacing, N_segs=N_segs, win_type=win_type)
   else:
-    freq_ax, stft = reuse_stft
+    f, stft = reuse_stft
     # Make sure these are valid
-    if stft.shape[1] != freq_ax.shape[0]:
+    if stft.shape[1] != f.shape[0]:
       raise Exception("STFT and frequency axis don't match!")
 
   # calculate necessary params from the stft
@@ -666,10 +667,10 @@ def get_welch(wf, fs, tau=None, tauS=None, seg_spacing=None, N_segs=None, win_ty
     spectrum[-1] = spectrum[-1] / 2
   
   if not return_dict:
-    return freq_ax, spectrum
+    return f, spectrum
   else:
     return {  
-      "freq_ax" : freq_ax,
+      "f" : f,
       "spectrum" : spectrum,
       "segmented_spectrum" : segmented_spectrum
       }    
