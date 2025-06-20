@@ -12,12 +12,12 @@ import pandas as pd
 for end_decay_at in ['Next Min', 'Noise Floor']:
     # for rho in [0.7, 0.65, 0.75]:
     # for rho in [None, 0.6, 0.8]:
-    # for rho in [-1]:
-    for rho in [0.7]:
+    for rho in [-1]:
+    # for rho in [0.7]:
         # Initialize list for row dicts for xlsx file
         rows = []
         # for species in ['Anole', 'Owl', 'Human']:
-        for species in ['Tokay']:
+        for species in ['Anole']:
             for wf_idx in range(1):
                 print(f"Processing {species} {wf_idx} (rho={rho})")
                 
@@ -36,16 +36,16 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 delta_xi = min_xi
                 # skip_min_xi = True if (dense_stft, const_N_pd) == (0, 0) else False
                 skip_min_xi = False
-                force_recalc_coherences = 0
+                force_recalc_coherences = 1
                 dense_stft = 1
                 const_N_pd = 1
                 
                 
                 # Output options
                 output_colossogram = 0
-                output_peak_picks = 0
-                output_fits = 1
-                output_spreadsheet = 1
+                output_peak_picks = 1
+                output_fits = 0
+                output_spreadsheet = 0
                 show_plots = 0
             
                 
@@ -230,6 +230,7 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                     plt.legend()
                     plt.xlim(0, max_khz)
                     plt.tight_layout()
+                    plt.savefig(f'{results_folder}\Peak Picks\{fn_id} (Peak Picks).png', dpi=300)
                     if show_plots:
                         plt.show()
                     

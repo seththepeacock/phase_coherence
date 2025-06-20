@@ -15,7 +15,7 @@ xis = np.linspace(0, 0.1, 6)
 # xis = np.array([0])
 xiSs = (xis * fs).astype(int)
 L = 2**13  # Signal length per realization
-win_type = 'boxcar'
+win_type = 'hann'
 window = get_window(win_type, tauS)
 nrealizations = 10 # Number of independent realizations to average
 freq = 0 # If we only want to look at a single frequency bin
@@ -26,7 +26,7 @@ if freq: # Get index, if necessary
 
 # for nrealizations in [1, 10, 100]:
 #     for seg_spacing in (xis[1], xis[1]/2, xis[1]/4, xis[1]/8):
-for nrealizations in [10]:
+for nrealizations in [1]:
 
     for seg_spacing in [xis[1]]:
         print(f"Running for L={L}, seg_spacing={seg_spacing}, nrealizations={nrealizations}")
@@ -69,12 +69,12 @@ for nrealizations in [10]:
                 Pxx = welch(x, fs=fs, window=win_type, nperseg=tauS, noverlap=noverlap, detrend=False)[1]
                 Pyy = welch(x_delayed, fs=fs, window=win_type, nperseg=tauS, noverlap=noverlap, detrend=False)[1]
                 
-                # # Scipy manual
-                f, Pxy = csd(x, x_delayed, fs=fs, window=win_type, nperseg=tauS, noverlap=noverlap, detrend=False, scaling='density')
-                Cxy = np.abs(Pxy)**2 / (Pxx * Pyy)
-                if freq:
-                    Cxy = Cxy[freq_idx]
-                coh_vals_scipy_manual.append(Cxy)
+                # # # Scipy manual
+                # f, Pxy = csd(x, x_delayed, fs=fs, window=win_type, nperseg=tauS, noverlap=noverlap, detrend=False, scaling='density')
+                # Cxy = np.abs(Pxy)**2 / (Pxx * Pyy)
+                # if freq:
+                #     Cxy = Cxy[freq_idx]
+                # coh_vals_scipy_manual.append(Cxy)
                 
                 
                 
@@ -87,22 +87,60 @@ for nrealizations in [10]:
                 #     Cxy = Cxy[freq_idx]
                 # coh_vals_phaseco.append(Cxy)
                 
+                
+                
+                "Scipy Extra Manual"
+                # "PROVEN THIS IS EQUIVALENT TO SCIPY"
+                # # scipy extra manual
+                # f, Pxy = get_csd(x, x_delayed, fs=fs, tauS=tauS, seg_spacing=seg_spacing, win_type=win_type)
+                # Cxy = np.abs(Pxy)**2 / (Pxx * Pyy)
+    
+                # if freq:
+                #     Cxy = Cxy[freq_idx]
+                # coh_vals_scipy_extra_manual.append(Cxy)
+
+                "SCIPY EXTRA MANUAL RIGHT HERE"
+                # Compute coherence using scipy and phaseco
+                hop = round(seg_spacing * fs)
+                noverlap = tauS - hop
+
+                SFT = ShortTimeFFT(window, hop, fs, fft_mode='onesided', scale_to=None, phase_shift=None)
+
+                # Compute spectrogram: csd uses y, x (note reversed order)
+                Pxy = SFT.spectrogram(x_delayed, x, p0=0, p1=(len(x) - noverlap) // hop, k_offset=tauS // 2)
+
+                # Apply onesided doubling (if real and return_onesided=True)
+                if np.isrealobj(x) and SFT.fft_mode == 'onesided':
+                    Pxy[1:-1 if SFT.mfft % 2 == 0 else None, :] *= 2
+
+                # Average across time segments (axis=1 if time is columns)
+                Pxy = np.mean(Pxy, axis=1)
+
+                # Scale
+                Pxy /= fs * np.sum(window ** 2)
+                
+            
+            
                 # Phaseco (Weighted)
-                d = get_coherence(x_full, fs, xi=xi, tauS=tauS, seg_spacing = seg_spacing, win_type=win_type, power_weights=True, scipy_stft=True, return_dict=True)
+                # Build STFT dict 
+                scipy_stft = SFT.stft(x_full)
+                scipy_stft = scipy_stft.T
+                f = SFT.f               
+                stft_dict = {
+                    "tau": tau,
+                    "tauS": tauS,
+                    "f": f,
+                    "stft": scipy_stft,
+                    "seg_spacing": seg_spacing,
+                    "window": window
+                }
+                
+                d = get_coherence(x_full, fs, xi=xi, tauS=tauS, seg_spacing = seg_spacing, win_type=win_type, power_weights=True, reuse_stft=stft_dict, return_dict=True)
                 f, Pxy, N_pd = d['f'], d['coherence'], d['N_pd']
                 if freq:
                     Pxy = Pxy[freq_idx]
                 Cxy = np.abs(Pxy)**2 / (Pxx * Pyy) 
                 coh_vals_phaseco_weighted.append(Cxy)
-                
-                "PROVEN THIS IS EQUIVALENT TO SCIPY"
-                # scipy extra manual
-                f, Pxy = get_csd(x, x_delayed, fs=fs, tauS=tauS, seg_spacing=seg_spacing, win_type=win_type)
-                Cxy = np.abs(Pxy)**2 / (Pxx * Pyy)
-    
-                if freq:
-                    Cxy = Cxy[freq_idx]
-                coh_vals_scipy_extra_manual.append(Cxy)
                     
 
                 
