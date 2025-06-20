@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.signal import get_window, stft
+from scipy.signal import get_window, ShortTimeFFT
 from scipy.fft import rfft, rfftfreq, fftshift
 import pywt
 import warnings
@@ -34,31 +34,28 @@ def get_csd(x, y, fs, tauS, seg_spacing=None, win_type='boxcar'):
     if seg_spacing is None:
         seg_spacing = tauS / fs  # non-overlapping
 
-    noverlap = tauS - round(seg_spacing * fs)
-    nfft = tauS  # match scipy default
+    # Compute coherence using scipy and phaseco
+    hop = round(seg_spacing * fs)
+    noverlap = tauS - hop
 
-    # Use scipy STFT with same padding/boundary settings
-    f, _, stftX = stft(x, fs=fs, window=window, nperseg=tauS,
-                       noverlap=noverlap, nfft=nfft,
-                       boundary='zeros', padded=True,
-                       detrend=False)
+    SFT = ShortTimeFFT(window, hop, fs, fft_mode='onesided', scale_to=None, phase_shift=None)
 
-    _, _, stftY = stft(y, fs=fs, window=window, nperseg=tauS,
-                       noverlap=noverlap, nfft=nfft,
-                       boundary='zeros', padded=True,
-                       detrend=False)
+    # Compute spectrogram: csd uses y, x (note reversed order)
+    Pxy = SFT.spectrogram(y, x, p0=0, p1=(len(x) - noverlap) // hop, k_offset=tauS // 2)
 
-    # Cross-spectrum (freqs x segments)
-    product_stft = stftX * np.conj(stftY)
+    # Apply onesided doubling (if real and return_onesided=True)
+    if np.isrealobj(x) and SFT.fft_mode == 'onesided':
+        Pxy[1:-1 if SFT.mfft % 2 == 0 else None, :] *= 2
 
-    # Scaling to match csd(..., scaling='density')
-    S2 = np.sum(window ** 2)
-    product_stft *= 1.0 / (fs * S2)
+    # Average across time segments (axis=1 if time is columns)
+    Pxy = np.mean(Pxy, axis=1)
 
-    # Average over segments (axis=1)
-    Pxy = np.mean(product_stft, axis=1)
+    # Normalize (done already)
+    Pxy /= fs * np.sum(window ** 2)
+    
+    return SFT.f, Pxy
 
-    return f, Pxy
+
 
 
 
@@ -347,6 +344,7 @@ def get_coherence(
     freq_bin_hop=1,
     return_avg_abs_phase_diffs=False,
     return_dict=False,
+    scipy_stft=False
 ):
     """Gets the phase coherence of the given waveform with the given window size
 
@@ -388,40 +386,58 @@ def get_coherence(
           d["stft"] = stft
     """
 
-    # if nothing was passed into reuse_stft then we need to recalculate it
-    if reuse_stft is None:
-        stft_dict = get_stft(
-            wf=wf,
-            fs=fs,
-            tau=tau,
-            tauS=tauS,
-            xi=xi,
-            seg_spacing=seg_spacing,
-            N_segs=N_segs,
-            rho=rho,
-            win_type=win_type,
-            cutoff_freq=cutoff_freq,
-            return_dict=True,
-        )
-    else:
-        # If a stft is passed in, we just use it no questions asked
-        stft_dict = reuse_stft
-        # Get the tau/xi from the stft that was passed in since this could have technically been something else
-        tau = stft_dict["tau"]
-        tauS = stft_dict["tauS"]
-
-    # Retrieve necessary items from dictionary
-    f = stft_dict["f"]
-    stft = stft_dict["stft"]
-    seg_spacing = stft_dict["seg_spacing"]
-    window = stft_dict["window"]
-
-    # Make sure these are valid
-    if stft.shape[1] != f.shape[0]:
-        raise Exception("STFT and frequency axis don't match!")
-
     # Handle errors from incorrect passing of tau/tauS in case they weren't caught in OG stft calculation
     tau, tauS = tau_or_tauS(fs, tau, tauS)
+    
+    window = get_window(win_type, tauS)
+    
+    
+    if not scipy_stft:
+        # if nothing was passed into reuse_stft then we need to recalculate it
+        if reuse_stft is None:
+            stft_dict = get_stft(
+                wf=wf,
+                fs=fs,
+                tau=tau,
+                tauS=tauS,
+                xi=xi,
+                seg_spacing=seg_spacing,
+                N_segs=N_segs,
+                rho=rho,
+                win_type=win_type,
+                cutoff_freq=cutoff_freq,
+                return_dict=True,
+            )
+        else:
+            # If a stft is passed in, we just use it no questions asked
+            stft_dict = reuse_stft
+            # Get the tau/xi from the stft that was passed in since this could have technically been something else
+            tau = stft_dict["tau"]
+            tauS = stft_dict["tauS"]
+
+        # Retrieve necessary items from dictionary
+        f = stft_dict["f"]
+        stft = stft_dict["stft"]
+        seg_spacing = stft_dict["seg_spacing"]
+        window = stft_dict["window"]
+
+        # Make sure these are valid
+        if stft.shape[1] != f.shape[0]:
+            raise Exception("STFT and frequency axis don't match!")
+    else:
+        if seg_spacing is None:
+            seg_spacing = tauS / fs
+        hop = round(seg_spacing * fs)
+        noverlap = tauS - hop
+        SFT = ShortTimeFFT(window, hop, fs, fft_mode='onesided', scale_to=None, phase_shift=None)
+        stft = SFT.stft(wf, p0=0, p1=(len(wf) - noverlap) // hop, k_offset=tauS // 2)
+        # print("SFT With p1", stft.shape)
+        # stft = get_stft(wf, fs, tau, tauS, xi, seg_spacing, N_segs, rho, win_type, cutoff_freq, return_dict=False)
+        # print(stft.shape)
+        stft = stft.T
+        f = SFT.f
+        
+        stft_dict = None
 
     # calculate necessary params from the stft
     N_segs, N_bins = np.shape(stft)
@@ -461,16 +477,11 @@ def get_coherence(
             mags = np.abs(stft)
             for seg in range(N_pd):
                 power_weights[seg] = (mags[seg + xi_in_num_segs] * mags[seg])
-            # Calculate normalizing factor
-            # Start with standard periodogram/spectrum scaling, then divide by bin width (times ENBW in # bins)
-            S1 = np.sum(window)
-            S2 = np.sum(window**2)
-            ENBW = tauS * S2 / S1**2 # In # bins
-            bin_width = fs / tauS
-            normalizing_factor = 1 / S1**2
-            normalizing_factor = normalizing_factor /  (ENBW * bin_width)
-            # Normalize!
-            power_weights = power_weights * normalizing_factor
+            power_weights[:, 1:-1] = power_weights[:, 1:-1] * 2 # Multiply by 2 to account for one sided FT
+            if N_bins % 2 != 0: # If the number of bins is odd, multiply the nyquist bin by 2
+                power_weights[:, -1] = power_weights[:, -1] * 2
+            # Scale!
+            power_weights = power_weights / (np.sum(window)*fs)
 
         # calc phase diffs
         for seg in range(N_pd):

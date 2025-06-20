@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import coherence, hann, welch, csd
+from scipy.signal import welch, csd
 from phaseco import *
 from tqdm import tqdm
 from collections import defaultdict
@@ -12,21 +12,13 @@ N = 2**9  # Window length
 tauS = N
 tau = tauS / fs
 xis = np.linspace(0, 0.1, 6)
+# xis = np.array([0])
 xiSs = (xis * fs).astype(int)
 L = 2**13  # Signal length per realization
-win_type = 'hann'
+win_type = 'boxcar'
 window = get_window(win_type, tauS)
 nrealizations = 10 # Number of independent realizations to average
-freq = 100 # If we only want to look at a single frequency bin
-
-# Start with standard periodogram/spectrum scaling, then divide by bin width (times ENBW in samples)
-S1 = np.sum(window)
-S2 = np.sum(window**2)
-ENBW = tauS * S2 / S1**2 # In samples
-bin_width = 1 / tau
-bin_width = fs / tauS
-normalizing_factor = 1 / S1**2
-normalizing_factor = normalizing_factor /  (ENBW * bin_width)
+freq = 0 # If we only want to look at a single frequency bin
 
 
 if freq: # Get index, if necessary
@@ -34,7 +26,8 @@ if freq: # Get index, if necessary
 
 # for nrealizations in [1, 10, 100]:
 #     for seg_spacing in (xis[1], xis[1]/2, xis[1]/4, xis[1]/8):
-for nrealizations in [1]:
+for nrealizations in [10]:
+
     for seg_spacing in [xis[1]]:
         print(f"Running for L={L}, seg_spacing={seg_spacing}, nrealizations={nrealizations}")
 
@@ -50,10 +43,10 @@ for nrealizations in [1]:
             xiS = int(xi*fs)
             coh_vals_phaseco = []
             coh_vals_phaseco_weighted = []
-            coh_vals_scipy = []
+            coh_vals_scipy_coherence = []
             coh_vals_scipy_manual = []
             coh_vals_scipy_pxy = []
-            coh_vals_seth_coherence = []
+            coh_vals_scipy_extra_manual = []
             
             for _ in range(nrealizations):
                 x_full = np.random.normal(0, 1, L)
@@ -71,12 +64,13 @@ for nrealizations in [1]:
                 N_pd = int(((L-xiS)-noverlap) / (tauS-noverlap)) 
                 # if freq:
                 #     Cxy = Cxy[freq_idx]
-                # coh_vals_scipy.append(Cxy)
+                # coh_vals_scipy_coherence.append(Cxy)
+                
+                Pxx = welch(x, fs=fs, window=win_type, nperseg=tauS, noverlap=noverlap, detrend=False)[1]
+                Pyy = welch(x_delayed, fs=fs, window=win_type, nperseg=tauS, noverlap=noverlap, detrend=False)[1]
                 
                 # # Scipy manual
-                f, Pxy = csd(x, x_delayed, fs=fs, window=window, nperseg=tauS, noverlap=noverlap, detrend=False, scaling='density')
-                Pxx = welch(x, fs=fs, window=window, nperseg=tauS, noverlap=noverlap)[1]
-                Pyy = welch(x_delayed, fs=fs, window=window, nperseg=tauS, noverlap=noverlap)[1]
+                f, Pxy = csd(x, x_delayed, fs=fs, window=win_type, nperseg=tauS, noverlap=noverlap, detrend=False, scaling='density')
                 Cxy = np.abs(Pxy)**2 / (Pxx * Pyy)
                 if freq:
                     Cxy = Cxy[freq_idx]
@@ -94,21 +88,21 @@ for nrealizations in [1]:
                 # coh_vals_phaseco.append(Cxy)
                 
                 # Phaseco (Weighted)
-                d = get_coherence(x_full, fs, xi=xi, tauS=tauS, seg_spacing = seg_spacing, win_type=win_type, power_weights=True, return_dict=True)
+                d = get_coherence(x_full, fs, xi=xi, tauS=tauS, seg_spacing = seg_spacing, win_type=win_type, power_weights=True, scipy_stft=True, return_dict=True)
                 f, Pxy, N_pd = d['f'], d['coherence'], d['N_pd']
                 if freq:
                     Pxy = Pxy[freq_idx]
                 Cxy = np.abs(Pxy)**2 / (Pxx * Pyy) 
                 coh_vals_phaseco_weighted.append(Cxy)
                 
-                # Seth coherence
+                "PROVEN THIS IS EQUIVALENT TO SCIPY"
+                # scipy extra manual
                 f, Pxy = get_csd(x, x_delayed, fs=fs, tauS=tauS, seg_spacing=seg_spacing, win_type=win_type)
                 Cxy = np.abs(Pxy)**2 / (Pxx * Pyy)
     
                 if freq:
                     Cxy = Cxy[freq_idx]
-                coh_vals_seth_coherence.append(Cxy)
-                print(Cxy)
+                coh_vals_scipy_extra_manual.append(Cxy)
                     
 
                 
@@ -117,9 +111,9 @@ for nrealizations in [1]:
 
             
             # Average over frequency and trials
-            # avg_coherence_vals['scipy'][xi_idx] = np.mean([np.mean(c) for c in coh_vals_scipy]) 
-            avg_coherence_vals['scipy_manual'][xi_idx] = np.mean([np.mean(c) for c in coh_vals_scipy_manual]) 
-            avg_coherence_vals['seth_coherence'][xi_idx] = np.mean([np.mean(c) for c in coh_vals_seth_coherence]) 
+            # avg_coherence_vals['scipy_coherence'][xi_idx] = np.mean([np.mean(c) for c in coh_vals_scipy_coherence]) 
+            # avg_coherence_vals['scipy_manual'][xi_idx] = np.mean([np.mean(c) for c in coh_vals_scipy_manual]) 
+            avg_coherence_vals['scipy_extra_manual'][xi_idx] = np.mean([np.mean(c) for c in coh_vals_scipy_extra_manual]) 
             # avg_coherence_vals['phaseco'][xi_idx] = np.mean([np.mean(c) for c in coh_vals_phaseco])  
             avg_coherence_vals['phaseco_weighted'][xi_idx] = np.mean([np.mean(c) for c in coh_vals_phaseco_weighted])
 
@@ -133,13 +127,13 @@ for nrealizations in [1]:
 
         # Plotting
         plt.figure(figsize=(10, 6))
-        # for calculation_type in ['phaseco', 'phaseco_weighted', 'scipy', 'scipy_manual']:
-        for calculation_type in ['phaseco_weighted', 'scipy_manual', 'seth_coherence']:
+        # for calculation_type in ['phaseco', 'phaseco_weighted', 'scipy_coherence', 'scipy_manual']:
+        for calculation_type in ['phaseco_weighted', 'scipy_extra_manual']:
             plt.plot(xis, avg_coherence_vals[calculation_type], 'o-', label=f'Simulated Mean Coherence (White Noise) -- {calculation_type}', linewidth=2)
-        # plt.plot(xis, bias_estimate, 's--', label='Theoretical Bias $(R_w(\\xi_S)/R_w(0))^2$', linewidth=2)
+        plt.plot(xis, bias_estimate, 's--', label='Theoretical Bias $(R_w(\\xi_S)/R_w(0))^2$', linewidth=2)
         plt.xlabel("Lag (xi)")
         plt.ylabel("Coherence")
-        plt.ylim(0, 1)
+        # plt.ylim(0, 1)
         title = f"White Noise Coherence Decay - wf_length={L}, nrealizations={nrealizations}, freq={freq}, seg_spacing={seg_spacing}, N_pd={N_pd}"
         plt.title(title)
         plt.grid(True)
