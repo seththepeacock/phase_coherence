@@ -5,13 +5,13 @@ from .funcs import *
 
 
 "Colossogram Plot Function"
-def plot_colossogram(coherences, f, xis, tau, title=None, max_khz=None, cmap='magma'):
+def plot_colossogram(coherences, f, xis, tau=None, title=None, max_khz=None, cmap='magma'):
     # make meshgrid
     xx, yy = np.meshgrid(xis * 1000, f / 1000) # Note we convert xis to ms and f to kHz
     
     # plot the heatmap
     vmin = 0
-    vmax = 1
+    vmax = None
     heatmap = plt.pcolormesh(xx, yy, coherences, vmin=vmin, vmax=vmax, cmap=cmap, shading='nearest')
 
     # get and set label for cbar
@@ -24,7 +24,7 @@ def plot_colossogram(coherences, f, xis, tau, title=None, max_khz=None, cmap='ma
     plt.xlabel(rf"$\xi$ [ms]")
     plt.ylabel("Frequency [kHz]")
     if title is None:
-        title = rf"Colossogram with $\tau={tau:.3f}s$"
+        title = rf"Colossogram with $\tau={tau:.3f}s$" if tau else "Colossogram"
     plt.title(title)
 
 def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scaling='density', ref_type="next_win", win_type='boxcar', fftshift_segs=False, khz=False, db=True, downsample_freq=False, 

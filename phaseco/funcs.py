@@ -17,12 +17,14 @@ def get_avg_vector(phase_diffs, power_weights=None):
     Parameters
     ------------
         phase_diffs: array
-          array of phase differences
+          array of phase differences (N_pd, N_bins)
     """
-    Zs = np.e**(1j * phase_diffs)
+    Zs = np.exp(1j * phase_diffs)
     if power_weights is not None:
         Zs = power_weights * Zs
-    avg_vector = np.mean(Zs, axis=0, dtype=complex)
+    avg_vector = np.sum(Zs, axis=0, dtype=complex)
+    avg_vector /= Zs.shape[0]
+    
 
     # finally, output the averaged vector's vector strength and angle with x axis (each a 1D array along the frequency axis)
     return np.abs(avg_vector), np.angle(avg_vector)
@@ -113,7 +115,11 @@ def param_or_paramS(fs, param, paramS, name):
         else:
             paramS = round(param * fs)
     else:
-        if param is not None:  # Here tauS is not None, and neither is tau...
+        # check if paramS is an int
+        if not isinstance(paramS, int):
+            raise ValueError(f"{name}S must be an integer!")
+        if param is not None:
+            # Here both param and paramS have been passed in; check if they're equivalent  
             if paramS != round(param * fs):
                 raise ValueError(
                     f"You gave both {name}={param} and {name}S={paramS}, and they're not equivalent for fs={fs}... which do we use?"
@@ -185,6 +191,7 @@ def get_stft(
     # Make sure we got parameters in both seconds and samples
     tau, tauS = param_or_paramS(fs, tau, tauS, 'tau')
     hop, hopS = param_or_paramS(fs, hop, hopS, 'hop')
+        
     if xi is not None or xiS is not None:
         xi, xiS = param_or_paramS(fs, xi, xiS, 'xi')
         
@@ -353,8 +360,7 @@ def get_coherence(
     cutoff_freq=None,
     freq_bin_hop=1,
     return_avg_abs_phase_diffs=False,
-    return_dict=False,
-    scipy_stft=False
+    return_dict=False
 ):
     """Gets the phase coherence of the given waveform with the given window size
 
@@ -399,62 +405,52 @@ def get_coherence(
 
     
     
-    if not scipy_stft:
-        # if nothing was passed into reuse_stft then we need to recalculate it
-        if reuse_stft is None:
-            stft_dict = get_stft(
-                wf=wf,
-                fs=fs,
-                tau=tau,
-                tauS=tauS,
-                xi=xi,
-                hop=hop,
-                N_segs=N_segs,
-                rho=rho,
-                win_type=win_type,
-                cutoff_freq=cutoff_freq,
-                return_dict=True,
-            )
-            
-            # Handle errors from incorrect passing of tau/tauS in case they weren't caught in OG stft calculation
-            tau, tauS = param_or_paramS(fs, tau, tauS, 'tau')
-            hop, hopS = param_or_paramS(fs, hop, hopS, 'hop')
-            xi, xiS = param_or_paramS(fs, xi, xiS, 'xi')
-            window = get_window(win_type, tauS)
-        else:
-            # If a stft is passed in, we just use it
-            stft_dict = reuse_stft
-            # Get the tau/xi from the stft that was passed in since this could have technically been something else
-            tau = stft_dict["tau"]
-            tauS = stft_dict["tauS"]
-            hop = stft_dict["hop"]
-            hopS = stft_dict["hopS"]
-            xi = stft_dict["xi"]
-            xiS = stft_dict["xiS"]
-            window = stft_dict["window"]
-
-        # Retrieve necessary items from dictionary
-        f = stft_dict["f"]
-        stft = stft_dict["stft"]
+    # if nothing was passed into reuse_stft then we need to recalculate it
+    if reuse_stft is None:
+        stft_dict = get_stft(
+            wf=wf,
+            fs=fs,
+            tau=tau,
+            tauS=tauS,
+            xi=xi,
+            xiS=xiS,
+            hop=hop,
+            hopS=hopS,
+            N_segs=N_segs,
+            rho=rho,
+            win_type=win_type,
+            cutoff_freq=cutoff_freq,
+            return_dict=True,
+        )
         
-
-        # Make sure these are valid
-        if stft.shape[1] != f.shape[0]:
-            raise Exception("STFT and frequency axis don't match!")
+        # Handle errors from incorrect passing of tau/tauS in case they weren't caught in OG stft calculation
+        tau, tauS = param_or_paramS(fs, tau, tauS, 'tau')
+        hop, hopS = param_or_paramS(fs, hop, hopS, 'hop')
+        xi, xiS = param_or_paramS(fs, xi, xiS, 'xi')
+        window = get_window(win_type, tauS)
     else:
-        if hop is None:
-            hop = tauS / fs
-        hop = round(hop * fs)
-        noverlap = tauS - hop
-        SFT = ShortTimeFFT(window, hop, fs, fft_mode='onesided', scale_to=None, phase_shift=None)
-        stft = SFT.stft(wf, p0=0, p1=(len(wf) - noverlap) // hop, k_offset=tauS // 2)
-        # print("SFT With p1", stft.shape)
-        # stft = get_stft(wf, fs, tau, tauS, xi, hop, N_segs, rho, win_type, cutoff_freq, return_dict=False)
-        # print(stft.shape)
-        stft = stft.T
-        f = SFT.f
+        # If a stft is passed in, we just use it
+        stft_dict = reuse_stft
+        # Get the tau/xi from the stft that was passed in since this could have technically been something else
+        tau = stft_dict["tau"]
+        tauS = stft_dict["tauS"]
+        hop = stft_dict["hop"]
+        hopS = stft_dict["hopS"]
+        xi = stft_dict["xi"]
+        xiS = stft_dict["xiS"]
+        window = stft_dict["window"]
         
-        stft_dict = None
+
+        
+
+    # Retrieve necessary items from dictionary
+    f = stft_dict["f"]
+    stft = stft_dict["stft"]
+    
+    # Make sure these are valid
+    if stft.shape[1] != f.shape[0]:
+        raise Exception("STFT and frequency axis don't match!")
+
 
     # calculate necessary params from the stft
     N_segs, N_bins = np.shape(stft)
@@ -494,9 +490,7 @@ def get_coherence(
             mags = np.abs(stft)
             for seg in range(N_pd):
                 power_weights[seg] = (mags[seg + xi_in_num_segs] * mags[seg])
-            power_weights[:, 1:-1] = power_weights[:, 1:-1] * 2 # Multiply by 2 to account for one sided FT
-            if N_bins % 2 != 0: # If the number of bins is odd, multiply the nyquist bin by 2
-                power_weights[:, -1] = power_weights[:, -1] * 2
+            power_weights[:, 1:-1 if tauS % 2 == 0 else None] *= 2
             # Scale!
             power_weights = power_weights / (np.sum(window**2)*fs)
 
@@ -581,6 +575,7 @@ def get_coherence(
             "tauS": tauS,
             "xi": xi,
             "fs": fs,
+            "power_weights": power_weights,
         }
         if return_avg_abs_phase_diffs:
             # get <|phase diffs|> (note we're taking mean w.r.t. PD axis 0, not frequency axis)
@@ -597,7 +592,7 @@ def get_colossogram_coherences(
     tau=None,
     tauS=None,
     rho=0.7,
-    power_weights=False,
+    power_weights=None,
     const_N_pd=False,
     dense_stft=False,
     snapping_rhortle=False,
@@ -619,7 +614,7 @@ def get_colossogram_coherences(
     if dense_stft:
         # Set the STFT hop according to the minimum xi in this colossogram
         hop = min_xi
-        hopS = hop * fs
+        hopS = round(hop * fs)
 
         # Make sure all xis correspond to an integer*hop; since hop=min_xi, this is equivalent to making sure hop=delta_xi
         if hop != delta_xi:
@@ -648,8 +643,8 @@ def get_colossogram_coherences(
         min_hop = min_xi
 
     # Convert to # samples
-    max_hopS = max_hop * fs
-    min_hopS = min_hop * fs
+    max_hopS = round(max_hop * fs)
+    min_hopS = round(min_hop * fs)
 
     # Get the number of segments we have to shift to go global_max_xi seconds over in both the minimal/maximal N_pd cases
     global_max_xi_in_num_segs = check_xi_in_num_segs(
@@ -673,15 +668,16 @@ def get_colossogram_coherences(
 
     # Loop through xis and calculate coherences
     for i, xi in enumerate(tqdm(xis)):
+        xiS = int(xi * fs)
         if i == 0 and skip_min_xi:
             continue
-        # If we're above the threshold where dynamic windowing is needed, shut er off!N_xi Fits/Figures (rho=0.6)/Colossograms/Anole 0, const_Npd=0, dense_stft=0, rho=0.6, tau=186ms, max_xi=0.2, wf_length=60s, HPF=300Hz, wf=AC6rearSOAEwfB1 (Colossogram).png
+        # If we're above the threshold where dynamic windowing is needed, shut er off!
         if snapping_rhortle and xi > tau:
             rho = None
         # Set hop if not already done above
         if not dense_stft:
             hop = xi
-            hopS = hop * fs
+            hopS = round(hop * fs)
 
         # Get current xi in terms of number of segments
         current_xi_in_num_segs = check_xi_in_num_segs(
@@ -729,6 +725,7 @@ def get_colossogram_coherences(
             "N_pd_min": N_pd_min,
             "N_pd_max": N_pd_max,
             "hop": hop,
+            "hopS": hopS,
             "snapping_rhortle": snapping_rhortle,
         }
     else:

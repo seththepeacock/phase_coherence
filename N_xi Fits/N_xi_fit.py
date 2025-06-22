@@ -16,9 +16,12 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
     # for rho in [0.7]:
         # Initialize list for row dicts for xlsx file
         rows = []
-        # for species in ['Anole', 'Owl', 'Human']:
-        for species in ['Anole']:
-            for wf_idx in range(1):
+        for species in ['Anole', 'Owl', 'Human']:
+        # for species in ['Anole']:
+            for wf_idx in range(4):
+                if species == 'Anole' and wf_idx == 0:
+                    continue
+                    
                 print(f"Processing {species} {wf_idx} (rho={rho})")
                 
                 
@@ -42,9 +45,9 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 
                 
                 # Output options
-                output_colossogram = 0
-                output_peak_picks = 1
-                output_fits = 0
+                output_colossogram = 1
+                output_peak_picks = 0
+                output_fits = 1
                 output_spreadsheet = 0
                 show_plots = 0
             
@@ -145,7 +148,7 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 os.makedirs(pkl_folder, exist_ok=True)
                 if os.path.exists(pkl_folder + pkl_fn + '.pkl') and not force_recalc_coherences:
                     with open(pkl_folder + pkl_fn + '.pkl', 'rb') as file:
-                        coherences, f, xis, tau, rho, N_pd_min, N_pd_max, seg_spacing, snapping_rhortle, wf_fn, species = pickle.load(file)
+                        coherences, f, xis, tau, rho, N_pd_min, N_pd_max, hop, snapping_rhortle, wf_fn, species = pickle.load(file)
                 else:
                     # continue
                     print(f"Calculating coherences for {fn_id}")
@@ -155,12 +158,12 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                     xis = coherences_dict['xis']    
                     N_pd_min = coherences_dict['N_pd_min']
                     N_pd_max = coherences_dict['N_pd_max']
-                    seg_spacing = coherences_dict['seg_spacing']
+                    hop = coherences_dict['hop']
                     snapping_rhortle = coherences_dict['snapping_rhortle']
                     
                     with open(pkl_folder + pkl_fn + '.pkl', 'wb') as file:
                         # pickle.dump((coherences, f, xis, tau, rho, wf_fn, species), file)
-                        pickle.dump((coherences, f, xis, tau, rho, N_pd_min, N_pd_max, seg_spacing, snapping_rhortle, wf_fn, species), file)
+                        pickle.dump((coherences, f, xis, tau, rho, N_pd_min, N_pd_max, hop, snapping_rhortle, wf_fn, species), file)
                 
                 # Get peak bin indices
                 good_peak_idxs = np.argmin(np.abs(f[:, None] - good_peak_freqs[None, :]), axis=0) 
@@ -183,7 +186,7 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                     rho_str = rf"$\rho={rho}$"
                 suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{rho_str}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi*1000:.0f}$ms]   [{wf_length}s WF]   [{N_pd_str}]"
                 if dense_stft:
-                    suptitle += f'   [Dense STFT ({seg_spacing*1000}ms)]'
+                    suptitle += f'   [Dense STFT ({hop*1000}ms)]'
                 
                 
                 if output_colossogram:
