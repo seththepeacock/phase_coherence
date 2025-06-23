@@ -180,7 +180,7 @@ def get_is_signal(coherences, f, xis, f_peak_idx, f_noise=0, noise_floor_bw_fact
 def exp_decay(x, T, amp):
     return amp * np.exp(-x/T)
 
-def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho, end_decay_at):
+def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step, sigma_weighting_power, bounds, p0, coherences, xis, wf_fn, rho, ddx_thresh, ddx_thresh_in_num_cycles):
     
     if sigma_weighting_power == 0:
         get_fit_sigma = lambda y, sigma_weighting_power: np.ones(len(y))
@@ -211,26 +211,41 @@ def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step
             print(f"Three or more peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at third one!")
             decay_start_idx = maxima[2]
     
-    # Find decayed point
-    dip_below_noise_floor_idx = -1
-    for i in range(decay_start_idx, len(is_signal)):
+    # Find first time there is a "minimum" OR a dip below the noise floor
+    decayed_idx = -1
+    if ddx_thresh_in_num_cycles: 
+        ddx_thresh = ddx_thresh * freq
+        
+    # Since we use a derivative criteria and it starts at a local max, we should give it a few ms for the derivative to get nice and negative
+    ddx_search_buffer_sec = 0.005 # Corresponds to ~5 points since xi=0.001
+    decay_start_sec = xis[decay_start_idx]
+    ddx_search_start_sec = decay_start_sec + ddx_search_buffer_sec
+    ddx_search_start_idx = np.argmin(np.abs(xis-ddx_search_start_sec))
+
+    for i in range(ddx_search_start_idx, len(is_signal-1)):
         if not is_signal[i]:
-            dip_below_noise_floor_idx = i
+            decayed_idx = i
             break
-    if dip_below_noise_floor_idx == -1:
+        else:
+            ddx = (target_coherence[i+1] - target_coherence[i]) / (xis[i+1] - xis[i])
+            if ddx > ddx_thresh:
+                decayed_idx = i
+                break
+    
+    if decayed_idx == -1:
         print(f"Signal at {freq:.0f}Hz never decays!")
 
-    # Find all minima after the dip below the noise floor
-    if end_decay_at == 'Next Min':
-        minima = find_peaks(-target_coherence[dip_below_noise_floor_idx:])[0]
-        if len(minima) == 0:
-            # If no minima, just set decayed_idx to the dip below noise floor
-            decayed_idx = dip_below_noise_floor_idx
-        else:
-            # If there are minima, take the first one after the dip below noise floor
-            decayed_idx = dip_below_noise_floor_idx + minima[0]
-    else: 
-        decayed_idx = dip_below_noise_floor_idx
+    # # Find all minima after the dip below the noise floor
+    # if end_decay_at == 'Next Min':
+    #     minima = find_peaks(-target_coherence[dip_below_noise_floor_idx:])[0]
+    #     if len(minima) == 0:
+    #         # If no minima, just set decayed_idx to the dip below noise floor
+    #         decayed_idx = dip_below_noise_floor_idx
+    #     else:
+    #         # If there are minima, take the first one after the dip below noise floor
+    #         decayed_idx = dip_below_noise_floor_idx + minima[0]
+    # else: 
+    #     decayed_idx = dip_below_noise_floor_idx
         
     
     # Curve Fit
