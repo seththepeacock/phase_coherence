@@ -11,7 +11,7 @@ def plot_colossogram(coherences, f, xis, tau=None, title=None, max_khz=None, cma
     
     # plot the heatmap
     vmin = 0
-    vmax = None
+    vmax = 1
     heatmap = plt.pcolormesh(xx, yy, coherences, vmin=vmin, vmax=vmax, cmap=cmap, shading='nearest')
 
     # get and set label for cbar

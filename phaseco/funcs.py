@@ -11,23 +11,28 @@ HELPER FUNCTIONS
 """
 
 
-def get_avg_vector(phase_diffs, power_weights=None):
+def get_avg_vector(phase_diffs, power_weights=None, Pxx=None, Pyy=None):
     """Returns magnitude, phase of vector made by averaging over unit vectors with angles given by input phases
 
     Parameters
     ------------
         phase_diffs: array
           array of phase differences (N_pd, N_bins)
-    """
+    """        
     Zs = np.exp(1j * phase_diffs)
     if power_weights is not None:
         Zs = power_weights * Zs
-    avg_vector = np.sum(Zs, axis=0, dtype=complex)
-    avg_vector /= Zs.shape[0]
+    avg_vector = np.mean(Zs, axis=0, dtype=complex)
+    vec_strength = np.abs(avg_vector)
+    
+    if power_weights is not None:
+        if Pxx is None or Pyy is None:
+            raise ValueError("Pxx and Pyy must be provided if power_weights is provided")
+        vec_strength = vec_strength**2 / (Pxx * Pyy)
     
 
     # finally, output the averaged vector's vector strength and angle with x axis (each a 1D array along the frequency axis)
-    return np.abs(avg_vector), np.angle(avg_vector)
+    return vec_strength, np.angle(avg_vector)
 
 
 def get_csd(x, y, fs, tauS, hop=None, win_type='boxcar'):
@@ -492,7 +497,21 @@ def get_coherence(
                 power_weights[seg] = (mags[seg + xi_in_num_segs] * mags[seg])
             power_weights[:, 1:-1 if tauS % 2 == 0 else None] *= 2
             # Scale!
-            power_weights = power_weights / (np.sum(window**2)*fs)
+            scaling_factor = np.sum(window**2)*fs   
+            power_weights = power_weights / scaling_factor
+            
+            
+            stft_squared = (np.abs(stft))**2
+            if xi_in_num_segs == 0:
+                Pxx = np.mean(stft_squared, axis=0) / scaling_factor
+                Pyy = Pxx.copy()
+            else:
+                Pxx = np.mean(stft_squared[0:-xi_in_num_segs], axis=0) / scaling_factor
+                Pyy = np.mean(stft_squared[xi_in_num_segs:], axis=0) / scaling_factor
+            
+            Pxx[1:-1 if tauS % 2 == 0 else None] *= 2
+            Pyy[1:-1 if tauS % 2 == 0 else None] *= 2
+        
 
         # calc phase diffs
         for seg in range(N_pd):
@@ -501,7 +520,7 @@ def get_coherence(
             # phase_diffs[seg] = phases[seg] - phases[seg + xi_in_num_segs]
                 
 
-        coherence, avg_vector_angle = get_avg_vector(phase_diffs, power_weights=power_weights)
+        coherence, avg_vector_angle = get_avg_vector(phase_diffs, power_weights=power_weights, Pxx=Pxx, Pyy=Pyy)
 
     # or we can reference it against the phase of the next frequency in the same window:
     elif ref_type == "next_freq":

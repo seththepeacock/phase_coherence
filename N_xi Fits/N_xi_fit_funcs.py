@@ -6,6 +6,31 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.signal import find_peaks
 
+def scale_wf_long_way(wf):
+    # First, undo the mic amplifier gain
+    gain = 40 # dB
+    wf = wf * 10**(-gain/20)
+    # Then account for the calibration factor
+    cal_factor = 0.85
+    wf = wf / cal_factor
+    # The waveform is now in units of volts, where 1 micro volt = 0dB SPL = 20 micropascals
+    # Let's rescale so that now 1 waveform unit (*volt*) = 0dB SPL = 20 micropascals
+    wf = wf * 1e6
+    # Now, 20*log10(dft_mags(wf)) would directly be in dB SPL. 
+    
+    # Finally, (optional), we'll just convert it directly to pascals by multiplying by 20 micropascals:
+    wf_pa = wf * 20 * 1e-6
+    # Now, using this version, we would have to do 20*np.log10(dft_mags(wf_pa) / (20*1e-6)) to get dB SPL.)
+    
+    return wf_pa
+
+def scale_wf(wf):
+    # Proven this is equivalent to above
+    factor = (0.01) / 0.85 * 20
+    return wf * factor
+
+    
+
 def get_wf(wf_fn=None, species=None, wf_idx=None):
     if wf_fn is None:
         if species is None or wf_idx is None:
@@ -20,6 +45,9 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
         wf = sio.loadmat(data_folder + wf_fn)['wf'][0]
     else:
         wf = sio.loadmat(data_folder + wf_fn)['wf'][:, 0]
+        
+    if species in ["Anole", "Human"]:
+        wf = scale_wf(wf)
         
     # Get fs
     if wf_fn in ['Owl2R1.mat', 'Owl7L1.mat']:
@@ -208,8 +236,8 @@ def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step
             print(f"No peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at zero!")
             decay_start_idx = 0
         case _:
-            print(f"Three or more peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at third one!")
-            decay_start_idx = maxima[2]
+            print(f"Three or more peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at last one!")
+            decay_start_idx = maxima[-1]
     
     # Find first time there is a "minimum" OR a dip below the noise floor
     decayed_idx = -1
@@ -222,7 +250,7 @@ def fit_peak(f, f_peak_idx, noise_floor_bw_factor, decay_start_max_xi, trim_step
     ddx_search_start_sec = decay_start_sec + ddx_search_buffer_sec
     ddx_search_start_idx = np.argmin(np.abs(xis-ddx_search_start_sec))
 
-    for i in range(ddx_search_start_idx, len(is_signal-1)):
+    for i in range(ddx_search_start_idx, len(target_coherence)-1):
         if not is_signal[i]:
             decayed_idx = i
             break

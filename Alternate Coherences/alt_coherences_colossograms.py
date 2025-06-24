@@ -12,6 +12,7 @@ N = 2**9  # Window length
 tauS = N
 tau = tauS / fs
 xis = np.linspace(0, 0.1, 6)
+# xis = xis[0:2]
 # xis = np.array([0])
 xiSs = (xis * fs).astype(int)
 L = 2**13  # Signal length per realization
@@ -156,17 +157,15 @@ for hop in [xis[1]]:
             power_weights = True
             stft_dict = None
             d = get_coherence(x_full, fs, xiS=xiS, tauS=tauS, hopS=hopS, win_type=win_type, power_weights=power_weights, reuse_stft=stft_dict, return_dict=True)
-            f, Pxy, N_pd = d['f'], d['coherence'], d['N_pd']
-            if power_weights is not None:
-                Cxy = np.abs(Pxy)**2 / (Pxx * Pyy) 
-            else:
-                Cxy = Pxy
+            f, Cxy, N_pd = d['f'], d['coherence'], d['N_pd']
+            
             coherences['phaseco_weighted'][:, xi_idx] = Cxy
     
     # for coherence_type in coherences.keys():
     #     coherences[coherence_type] = coherences[coherence_type][1:-1]
     # f = f[1:-1]
-    print(np.sort(np.abs(coherences['phaseco_weighted'] - coherences["scipy_extra_manual"])[:, ], axis=None)[-5:])
+    
+    print(np.sort(np.abs(coherences['phaseco_weighted'] - coherences["scipy_extra_manual"]), axis=None)[-5:])
     # print(np.max((coherences['phaseco_weighted'][:])))
         
 
