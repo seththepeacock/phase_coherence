@@ -11,7 +11,7 @@ HELPER FUNCTIONS
 """
 
 
-def get_avg_vector(phase_diffs, power_weights=None, Pxx=None, Pyy=None):
+def get_avg_vector(phase_diffs, PW=None, Pxx=None, Pyy=None):
     """Returns magnitude, phase of vector made by averaging over unit vectors with angles given by input phases
 
     Parameters
@@ -20,14 +20,14 @@ def get_avg_vector(phase_diffs, power_weights=None, Pxx=None, Pyy=None):
           array of phase differences (N_pd, N_bins)
     """        
     Zs = np.exp(1j * phase_diffs)
-    if power_weights is not None:
-        Zs = power_weights * Zs
+    if PW is not None:
+        Zs = PW * Zs
     avg_vector = np.mean(Zs, axis=0, dtype=complex)
     vec_strength = np.abs(avg_vector)
     
-    if power_weights is not None:
+    if PW is not None:
         if Pxx is None or Pyy is None:
-            raise ValueError("Pxx and Pyy must be provided if power_weights is provided")
+            raise ValueError("Pxx and Pyy must be provided if PW is provided")
         vec_strength = vec_strength**2 / (Pxx * Pyy)
     
 
@@ -35,20 +35,18 @@ def get_avg_vector(phase_diffs, power_weights=None, Pxx=None, Pyy=None):
     return vec_strength, np.angle(avg_vector)
 
 
-def get_csd(x, y, fs, tauS, hop=None, win_type='boxcar'):
-    window = get_window(win_type, tauS)
+def get_csd(x, y, fs, nperseg, hop=None, win_type='boxcar'):
+    window = get_window(win_type, nperseg)
 
     if hop is None:
-        hop = tauS / fs  # non-overlapping
+        hop = nperseg # non-overlapping
 
-    # Compute coherence using scipy and phaseco
-    hop = round(hop * fs)
-    noverlap = tauS - hop
+    noverlap = nperseg - hop
 
     SFT = ShortTimeFFT(window, hop, fs, fft_mode='onesided', scale_to=None, phase_shift=None)
 
     # Compute spectrogram: csd uses y, x (note reversed order)
-    Pxy = SFT.spectrogram(y, x, p0=0, p1=(len(x) - noverlap) // hop, k_offset=tauS // 2)
+    Pxy = SFT.spectrogram(y, x, p0=0, p1=(len(x) - noverlap) // hop, k_offset=nperseg // 2)
 
     # Apply onesided doubling (if real and return_onesided=True)
     if np.isrealobj(x) and SFT.fft_mode == 'onesided':
@@ -98,47 +96,45 @@ def spectral_filter(wf, fs, cutoff_freq, type="hp"):
     return filtered_wf
 
 
-def get_sigmaS(fwhm, fs):
-    """Gets sigmaS for (SciPy get_window) as a function of what you want the Gaussian FWHM to be (in seconds)
+def get_sigmaS(fwhmS):
+    """Gets sigmaS for (SciPy get_window) as a function of what you want the Gaussian FWHM to be (in samples)
 
     Parameters
     ------------
         fwhm: float
-          Desired FWHM of the Gaussian window (in seconds)
-        fs: int
-          sample rate
+          Desired FWHM of the Gaussian window (in samples)
     """
-    sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
-    sigmaS = sigma * fs
+    sigmaS = fwhmS / (2 * np.sqrt(2 * np.log(2)))
     return sigmaS
 
 
-def param_or_paramS(fs, param, paramS, name):
-    if paramS is None:
-        if param is None:
-            raise ValueError(f"We didn't get {name} in either seconds or samples!")
-        else:
-            paramS = round(param * fs)
-    else:
-        # check if paramS is an int
-        if not isinstance(paramS, int):
-            raise ValueError(f"{name}S must be an integer!")
-        if param is not None:
-            # Here both param and paramS have been passed in; check if they're equivalent  
-            if paramS != round(param * fs):
-                raise ValueError(
-                    f"You gave both {name}={param} and {name}S={paramS}, and they're not equivalent for fs={fs}... which do we use?"
-                )
-        else:
-            param = paramS / fs
-    return param, paramS
+
+# def param_or_paramS(fs, param, paramS, name):
+#     if paramS is None:
+#         if param is None:
+#             raise ValueError(f"We didn't get {name} in either seconds or samples!")
+#         else:
+#             paramS = round(param * fs)
+#     else:
+#         # check if paramS is an int
+#         if not isinstance(paramS, int):
+#             raise ValueError(f"{name}S must be an integer!")
+#         if param is not None:
+#             # Here both param and paramS have been passed in; check if they're equivalent  
+#             if paramS != round(param * fs):
+#                 raise ValueError(
+#                     f"You gave both {name}={param} and {name}S={paramS}, and they're not equivalent for fs={fs}... which do we use?"
+#                 )
+#         else:
+#             param = paramS / fs
+#     return param, paramS
 
 
-def check_xi_in_num_segs(xi, hop, name):
-    xi_in_num_segs = xi / hop
+def check_xi_in_num_segs(xiS, hop, name):
+    xi_in_num_segs = xiS / hop
     if np.abs(round(xi_in_num_segs) - (xi_in_num_segs)) > 1e-12:
         raise Exception(
-            f"For {name}: this xi corresponds to going {xi_in_num_segs} segs away, needs to be an integer! Change xi={xi} or hop={hop}."
+            f"For {name}: this xi corresponds to going {xi_in_num_segs} segs away, needs to be an integer! Change xiS={xiS} or hop={hop}."
         )
     return round(xi_in_num_segs)
 
@@ -151,16 +147,12 @@ PRIMARY FUNCTIONS
 def get_stft(
     wf,
     fs,
-    tau=None,
-    tauS=None,
+    nperseg=None,
     hop=None,
-    hopS=None,
-    xi=None,
     xiS=None,
     rho=None,
     win_type="boxcar",
     N_segs=None,
-    cutoff_freq=None,
     fftshift_segs=False,
     return_dict=False,
 ):
@@ -193,36 +185,26 @@ def get_stft(
           d["segmented_wf"] = segmented_wf
           d["seg_start_indices"] = seg_start_indices
     """
-    # Make sure we got parameters in both seconds and samples
-    tau, tauS = param_or_paramS(fs, tau, tauS, 'tau')
-    hop, hopS = param_or_paramS(fs, hop, hopS, 'hop')
-        
-    if xi is not None or xiS is not None:
-        xi, xiS = param_or_paramS(fs, xi, xiS, 'xi')
+    
         
     
     # Handle C_tau case
     if rho == -1:
-        if xi is None and xiS is None:
+        if xiS is None:
             raise ValueError(
-                "You must input either xi or xiS when rho=-1!"
+                "You must input xiS when rho=-1!"
             )
-        og_tau, og_tauS = tau, tauS
-        tau, tauS = min(xi, og_tau), min(xiS, og_tauS)
-
-    # HPF the waveform
-    if cutoff_freq is not None:
-        wf = spectral_filter(wf=wf, fs=fs, cutoff_freq=cutoff_freq, type="hp")
-
+        og_nperseg = nperseg
+        nperseg = min(xiS, og_nperseg)
 
     # First, get the last index of the waveform
     final_wf_index = len(wf) - 1
 
     # next, we get what we would be the largest potential seg_start_index
     latest_potential_seg_start_index = final_wf_index - (
-        tauS - 1
-    )  # start at the final_wf_index. we need to collect nperseg points. this final index is our first one, and then we need tauS - 1 more.
-    seg_start_indices = np.arange(0, latest_potential_seg_start_index + 1, hopS)
+        nperseg - 1
+    )  # start at the final_wf_index. we need to collect nperseg points. this final index is our first one, and then we need nperseg - 1 more.
+    seg_start_indices = np.arange(0, latest_potential_seg_start_index + 1, hop)
     # the + 1 here is because np.arange won't ever include the "stop" argument in the output array... but it could include (stop - 1) which is just our final_seg_start_index!
 
     # if number of segments is passed in, we make sure it's less than the length of seg_start_indices
@@ -235,39 +217,36 @@ def get_stft(
     else:
         # if no N_segs is passed in, we'll just use the max number of segments
         N_segs = len(seg_start_indices)
-        if N_segs != int((len(wf) - tauS) / hopS) + 1:
+        if N_segs != int((len(wf) - nperseg) / hop) + 1:
             print(
-                f"Hm THATS WEIRD - N_SEGS METHOD 1 gives {N_segs} while other method gives {int((len(wf) - tauS) / hopS) + 1}"
+                f"Hm THATS WEIRD - N_SEGS METHOD 1 gives {N_segs} while other method gives {int((len(wf) - nperseg) / hop) + 1}"
             )
-        # this is equivalent to round((len(wf) - tauS) / xiS) + 1
 
     # Check how win_type has been passed in and get window accordingly
     if isinstance(win_type, str) or (
         isinstance(win_type, tuple) and isinstance(win_type[0], str)
     ):
         # Get window function (boxcar is no window)
-        window = get_window(win_type, tauS)
+        window = get_window(win_type, nperseg)
         # Do rho windowing if rho was passed in (and is not -1)
         if rho is not None and rho != -1:
-            if xi is None:
+            if xiS is None:
                 raise ValueError(
-                    "If you want to do rho-windowing, you need to input xi!"
+                    "If you want to do rho-windowing, you need to input xiS!"
                 )
-            sigmaS = get_sigmaS(
-                fwhm=rho * xi, fs=fs
-            )  # rho is the proportion of xi which we want the gaussian window's FWHM to be
-            gaussian = get_window(("gauss", sigmaS), tauS)
+            fwhmS = rho * xiS
+            sigmaS = get_sigmaS(fwhmS)  # rho is the proportion of xi which we want the gaussian window's FWHM to be
+            gaussian = get_window(("gauss", sigmaS), nperseg)
             window = gaussian * window  # In normal use, window will just be a boxcar, but...
             if win_type != "boxcar":  # Throw a warning if you're going to double window
                 warnings.warn(
                     f"You're double-windowing with both a Gaussian and a {win_type}!"
                 )
-
     else:  # Allow for passing in a custom window
         window = win_type
-        if len(window) != tauS:
+        if len(window) != nperseg:
             raise Exception(
-                f"Your custom window must be the same length as tauS ({tauS})!"
+                f"Your custom window must be the same length as nperseg ({nperseg})!"
             )
 
     # Check if we should be windowing or if unnecessary because they're all ones
@@ -277,11 +256,11 @@ def get_stft(
     
     # First handle the weird case where the chunk of waveform is just hop(=xi) and we must zero pad to make up the difference
     if rho == -1:
-        segmented_wf = np.zeros((N_segs, og_tauS))
+        segmented_wf = np.zeros((N_segs, og_nperseg))
         for k in range(N_segs):
             # grab the waveform in this segment
             seg_start = seg_start_indices[k]
-            seg_end = seg_start + tauS
+            seg_end = seg_start + nperseg
             seg = wf[seg_start:seg_end]
             if do_windowing:
                 seg = seg * window
@@ -289,22 +268,22 @@ def get_stft(
                 fftshift_segs
             ):  # optionally swap the halves of the waveform to effectively center it in time
                 seg = fftshift(seg)
-                seg = np.pad(seg, pad_width=((og_tauS - tauS) / 2)) # In this case, pad on both sides
+                seg = np.pad(seg, pad_width=((og_nperseg - nperseg) / 2)) # In this case, pad on both sides
             else:
                 seg = np.pad(
-                    seg, pad_width=(0, og_tauS - tauS)
-                )  # Just pad zeros to the end until we get to our original og_tauS
+                    seg, pad_width=(0, og_nperseg - nperseg)
+                )  # Just pad zeros to the end until we get to our original og_nperseg
             segmented_wf[k, :] = seg
         # Finally, get frequency axis
-        f = rfftfreq(og_tauS, 1/fs)
+        f = rfftfreq(og_nperseg, 1/fs)
 
 
     # Now handle the standard case
     else:
-        segmented_wf = np.zeros((N_segs, tauS))
+        segmented_wf = np.zeros((N_segs, nperseg))
         for k in range(N_segs):
             seg_start = seg_start_indices[k]
-            seg_end = seg_start + tauS
+            seg_end = seg_start + nperseg
             # grab the waveform in this segment
             seg = wf[seg_start:seg_end]
             if do_windowing:
@@ -315,7 +294,7 @@ def get_stft(
                 seg = fftshift(seg)
             segmented_wf[k, :] = seg
         # Finally, get frequency axis
-        f = rfftfreq(tauS, 1/fs)
+        f = rfftfreq(nperseg, 1/fs)
     
     # Now we do the ffts!   
 
@@ -336,8 +315,8 @@ def get_stft(
             "segmented_wf": segmented_wf,
             "hop": hop,
             "fs": fs,
-            "tau": tau,
-            "tauS": tauS,
+            "xiS": xiS,
+            "nperseg": nperseg,
             "hop": hop,
             "window": window,
             "fs": fs,
@@ -350,19 +329,15 @@ def get_stft(
 def get_coherence(
     wf,
     fs,
-    xi=None,
     xiS=None,
-    tau=None,
-    tauS=None,
+    nperseg=None,
     hop=None,
-    hopS=None,
     rho=None,
     win_type="boxcar",
-    power_weights=None,
+    PW=None,
     N_segs=None,
     reuse_stft=None,
     ref_type="next_seg",
-    cutoff_freq=None,
     freq_bin_hop=1,
     return_avg_abs_phase_diffs=False,
     return_dict=False
@@ -415,43 +390,26 @@ def get_coherence(
         stft_dict = get_stft(
             wf=wf,
             fs=fs,
-            tau=tau,
-            tauS=tauS,
-            xi=xi,
+            nperseg=nperseg,
             xiS=xiS,
             hop=hop,
-            hopS=hopS,
             N_segs=N_segs,
             rho=rho,
             win_type=win_type,
-            cutoff_freq=cutoff_freq,
             return_dict=True,
         )
-        
-        # Handle errors from incorrect passing of tau/tauS in case they weren't caught in OG stft calculation
-        tau, tauS = param_or_paramS(fs, tau, tauS, 'tau')
-        hop, hopS = param_or_paramS(fs, hop, hopS, 'hop')
-        xi, xiS = param_or_paramS(fs, xi, xiS, 'xi')
-        window = get_window(win_type, tauS)
     else:
         # If a stft is passed in, we just use it
         stft_dict = reuse_stft
-        # Get the tau/xi from the stft that was passed in since this could have technically been something else
-        tau = stft_dict["tau"]
-        tauS = stft_dict["tauS"]
-        hop = stft_dict["hop"]
-        hopS = stft_dict["hopS"]
-        xi = stft_dict["xi"]
-        xiS = stft_dict["xiS"]
-        window = stft_dict["window"]
-        
-
-        
 
     # Retrieve necessary items from dictionary
     f = stft_dict["f"]
     stft = stft_dict["stft"]
-    
+    nperseg = stft_dict["nperseg"]
+    hop = stft_dict["hop"]
+    xiS = stft_dict["xiS"]
+    window = stft_dict["window"]
+
     # Make sure these are valid
     if stft.shape[1] != f.shape[0]:
         raise Exception("STFT and frequency axis don't match!")
@@ -471,18 +429,12 @@ def get_coherence(
         unwrapping_axis = 0 if ref_type == "next_seg" else 1
         # Unwrap phases along the segment axis (0) or frequency bin axis (1)
         phases = np.unwrap(phases, axis=unwrapping_axis)
-        # However, if we're doing a dense STFT where the reference point is more than just the next seg over,
-        # unwrapping w.r.t. the seg axis MAY muck everything up!
-        if hop != xi and unwrapping_axis == 0:
-            raise RuntimeError(
-                "Before getting <|phase diffs|> if we're doing a dense STFT, double check that the required phase unwrapping won't mess everything up!"
-            )
 
     # we can reference each phase against the phase of the same frequency in the next window:
     if ref_type == "next_seg":
         # Make sure we can reference this xi in this STFT; xi should be an integer number of segs away
         xi_in_num_segs = check_xi_in_num_segs(
-            xi, hop, "xi_in_num_segs"
+            xiS, hop, "xi_in_num_segs"
         )  # Note that in classic case, xi=hop and this is xi/hop=1!
 
         # initialize array for phase diffs; we won't be able to get it for the final few segs though
@@ -490,15 +442,15 @@ def get_coherence(
         phase_diffs = np.zeros((N_pd, N_bins))
 
         # Optionally calculate the weights for the average vector
-        if power_weights:
-            power_weights = np.zeros((N_pd, N_bins))
+        if PW:
+            PW = np.zeros((N_pd, N_bins))
             mags = np.abs(stft)
             for seg in range(N_pd):
-                power_weights[seg] = (mags[seg + xi_in_num_segs] * mags[seg])
-            power_weights[:, 1:-1 if tauS % 2 == 0 else None] *= 2
+                PW[seg] = (mags[seg + xi_in_num_segs] * mags[seg])
+            PW[:, 1:-1 if nperseg % 2 == 0 else None] *= 2
             # Scale!
             scaling_factor = np.sum(window**2)*fs   
-            power_weights = power_weights / scaling_factor
+            PW = PW / scaling_factor
             
             
             stft_squared = (np.abs(stft))**2
@@ -509,8 +461,11 @@ def get_coherence(
                 Pxx = np.mean(stft_squared[0:-xi_in_num_segs], axis=0) / scaling_factor
                 Pyy = np.mean(stft_squared[xi_in_num_segs:], axis=0) / scaling_factor
             
-            Pxx[1:-1 if tauS % 2 == 0 else None] *= 2
-            Pyy[1:-1 if tauS % 2 == 0 else None] *= 2
+            Pxx[1:-1 if nperseg % 2 == 0 else None] *= 2
+            Pyy[1:-1 if nperseg % 2 == 0 else None] *= 2
+        else:
+            Pxx = None
+            Pyy = None
         
 
         # calc phase diffs
@@ -520,7 +475,7 @@ def get_coherence(
             # phase_diffs[seg] = phases[seg] - phases[seg + xi_in_num_segs]
                 
 
-        coherence, avg_vector_angle = get_avg_vector(phase_diffs, power_weights=power_weights, Pxx=Pxx, Pyy=Pyy)
+        coherence, avg_vector_angle = get_avg_vector(phase_diffs, PW=PW, Pxx=Pxx, Pyy=Pyy)
 
     # or we can reference it against the phase of the next frequency in the same window:
     elif ref_type == "next_freq":
@@ -538,10 +493,10 @@ def get_coherence(
                 )
 
         # get final coherence
-        coherence, avg_vector_angle = get_avg_vector(phase_diffs, power_weights=power_weights)
+        coherence, avg_vector_angle = get_avg_vector(phase_diffs, PW=PW)
 
         # Since this references each frequency bin to its adjacent neighbor, we'll plot them w.r.t. the average frequency
-        # this corresponds to shifting everything over half a bin width (bin width is 1/tau)
+        # this corresponds to shifting everything over half a bin width
         bin_width = f[1] - f[0]
         f = f + (bin_width / 2)
 
@@ -590,66 +545,62 @@ def get_coherence(
             "f": f,
             "stft": stft,
             "stft_dict": stft_dict,
-            "tau": tau,
-            "tauS": tauS,
-            "xi": xi,
+            "nperseg": nperseg,
+            "hop" : hop,
+            "xiS" : xiS,
             "fs": fs,
-            "power_weights": power_weights,
+            "PW": PW,
         }
         if return_avg_abs_phase_diffs:
             # get <|phase diffs|> (note we're taking mean w.r.t. PD axis 0, not frequency axis)
             d["avg_abs_phase_diffs"] = np.mean(np.abs(phase_diffs), 0)
         return d
 
-
 def get_colossogram_coherences(
     wf,
     fs,
-    min_xi,
-    max_xi,
-    delta_xi,
-    tau=None,
-    tauS=None,
-    rho=0.7,
-    power_weights=None,
-    const_N_pd=False,
-    dense_stft=False,
+    min_xiS,
+    max_xiS,
+    delta_xiS,
+    nperseg,
+    dyn_win=("rho", 0.7),
+    PW=None,
+    const_N_pd=1,
+    dense_stft=1,
     snapping_rhortle=False,
     global_max_xi=None,
-    skip_min_xi=False,
     return_dict=False,
 ):
-    # Handle possibilities of tau and tauS
-    tau, tauS = param_or_paramS(fs, tau, tauS, "tau")
 
     # Calculate xi array and N_bins
-    num_xis = int((max_xi - min_xi) / delta_xi) + 1
-    xis = np.linspace(min_xi, max_xi, num_xis)
-    f = np.array(rfftfreq(tauS, 1 / fs))
+    num_xis = int((max_xiS - min_xiS) / delta_xiS) + 1
+    xiSs = np.linspace(min_xiS, max_xiS, num_xis)
+    f = np.array(rfftfreq(nperseg, 1 / fs))
     N_bins = len(f)
     # Initialize coherences array
-    coherences = np.zeros((N_bins, len(xis)))
+    coherences = np.zeros((N_bins, len(xiSs)))
 
     if dense_stft:
         # Set the STFT hop according to the minimum xi in this colossogram
-        hop = min_xi
-        hopS = round(hop * fs)
+        hop = min_xiS
 
-        # Make sure all xis correspond to an integer*hop; since hop=min_xi, this is equivalent to making sure hop=delta_xi
-        if hop != delta_xi:
+        # Make sure all xis correspond to an integer*hop; since hop=min_xiS, this is equivalent to making sure hop=delta_xiS
+        if hop != delta_xiS:
             raise Exception(
-                "hop(=min_xi) must be equal to delta_xi or else our xi values won't correspond to referencing to an integer number of segs away!"
+                "hop(=min_xiS) must be equal to delta_xiS or else our xi values won't correspond to referencing to an integer number of segs away!"
             )
 
     "Get the minimum N_pd"
     # Set the max xi that will determine this minimum number of phase diffs
     # (either max xi within this colossogram, or a global one so it's constant across all colossograms in comparison)
     if global_max_xi is None:
-        global_max_xi = max_xi
+        global_max_xiS = max_xiS 
     elif not const_N_pd:
         raise Exception(
             "Why did you pass a global max xi if you're not holding N_pd constant?"
         )
+    else:
+        global_max_xiS = global_max_xi * fs # Note we wanted to pass in global_max_xi in secs so it can be consistent across samplerates
 
     # Calculate the maxmium/minimum hop which will determine the minimum/maximum N_pd
     if dense_stft:
@@ -657,58 +608,51 @@ def get_colossogram_coherences(
         max_hop = hop
         min_hop = hop
     else:
-        # hop=xi, but we know that the minimum N_pd is going to be when hop is maximum so:
-        max_hop = global_max_xi
-        min_hop = min_xi
+        # hop=xiS, but we know that the minimum N_pd is going to be when hop is maximum so:
+        max_hop = global_max_xiS
+        min_hop = min_xiS
 
-    # Convert to # samples
-    max_hopS = round(max_hop * fs)
-    min_hopS = round(min_hop * fs)
 
     # Get the number of segments we have to shift to go global_max_xi seconds over in both the minimal/maximal N_pd cases
     global_max_xi_in_num_segs = check_xi_in_num_segs(
-        global_max_xi, max_hop, "global_max_xi_in_num_segs"
+        global_max_xiS, max_hop, "global_max_xi_in_num_segs"
     )
     min_xi_in_num_segs = check_xi_in_num_segs(
-        min_xi, min_hop, "min_xi_in_num_segs"
+        min_xiS, min_hop, "min_xi_in_num_segs"
     )
 
     # Get the number of phase diffs (we can do this outside xi loop since it's constant)
-    # There are int((len(wf)-tauS)/hopS)+1 full tau-segments.
+    # There are int((len(wf)-nperseg)/hop)+1 full tau-segments.
     # But the last global_max_xi_in_num_segs (=1 in non-dense_stft-case, since global_max_xi=max_hop) ones won't have a reference.
-    N_pd_min = int((len(wf) - tauS) / max_hopS) + 1 - global_max_xi_in_num_segs
-    N_pd_max = int((len(wf) - tauS) / min_hopS) + 1 - min_xi_in_num_segs
+    N_pd_min = int((len(wf) - nperseg) / max_hop) + 1 - global_max_xi_in_num_segs
+    N_pd_max = int((len(wf) - nperseg) / min_hop) + 1 - min_xi_in_num_segs
 
     if const_N_pd:
         # If we're holding it constant, we hold it to the minimum
         N_pd = N_pd_min
-        # Even though techincally the potential N_pd_max is bigger, we just use N_pd_min all the way so this is also the max
+        # Even though the *potential* N_pd_max is bigger, we just use N_pd_min all the way so this is also the max
         N_pd_max = N_pd_min
 
     # Loop through xis and calculate coherences
-    for i, xi in enumerate(tqdm(xis)):
-        xiS = int(xi * fs)
-        if i == 0 and skip_min_xi:
-            continue
+    for i, xiS in enumerate(tqdm(xiSs)):
         # If we're above the threshold where dynamic windowing is needed, shut er off!
-        if snapping_rhortle and xi > tau:
+        if snapping_rhortle and xiS > nperseg:
             rho = None
         # Set hop if not already done above
         if not dense_stft:
-            hop = xi
-            hopS = round(hop * fs)
+            hop = xiS
 
         # Get current xi in terms of number of segments
         current_xi_in_num_segs = check_xi_in_num_segs(
-            xi, hop, f"current_xi_in_num_segs for xi={xi}"
+            xiS, hop, f"current_xi_in_num_segs for xiS={xiS}"
         )
 
-        # Calculate N_pd (if not already done already outside of loop)
+        # Calculate N_pd (assuming we're not holding it constant, in which case it was already done outside of loop)
         if not const_N_pd:
             # This is just as many segments as we possibly can
-            # There are int((len(wf)-tauS)/hopS)+1 full tau-segments, but the last current_xi_in_num_segs ones won't have a reference
+            # There are int((len(wf)-nperseg)/hopS)+1 full tau-segments, but the last current_xi_in_num_segs ones won't have a reference
             N_pd = (
-                int((len(wf) - tauS) / hopS) + 1 - int(current_xi_in_num_segs)
+                int((len(wf) - nperseg) / hop) + 1 - int(current_xi_in_num_segs)
             )
 
         # Get N_segs; We only need as many segments as there are PDs, plus the last one needs to be able to reference
@@ -716,42 +660,34 @@ def get_colossogram_coherences(
         coherences[:, i] = get_coherence(
             wf=wf,
             fs=fs,
-            tauS=tauS,
-            xi=xi,
+            nperseg=nperseg,
+            xiS=xiS,
             hop=hop,
-            rho=rho,
+            dyn_win=dyn_win,
             N_segs=N_segs,
-            power_weights=power_weights
+            PW=PW
         )[1]
-
-    # Reflect the fact that we skipped the first xi
-    if skip_min_xi:
-        xis = xis[1:]
-        coherences = coherences[:, 1:]
-
-    if rho == -1:
-        tau = r"$\xi$"
-        tauS = r"$\xi*f_s$"
 
     if return_dict:
         return {
-            "xis": xis,
+            "xiSs": xiSs,
             "f": f,
             "coherences": coherences,
-            "tau": tau,
-            "tauS": tauS,
+            "nperseg": nperseg,
             "fs": fs,
             "N_pd_min": N_pd_min,
             "N_pd_max": N_pd_max,
             "hop": hop,
-            "hopS": hopS,
             "snapping_rhortle": snapping_rhortle,
+            "global_max_xi": global_max_xi
         }
     else:
+        xis = xiSs / fs
         return xis, f, coherences
+    
 
 
-def get_asym_coherence(wf, fs, tauS, xi, fwhm=None, rho=None, N_segs=None):
+def get_asym_coherence(wf, fs, nperseg, xi, fwhm=None, rho=None, N_segs=None):
     """Gets the coherence using an asymmetric window (likely will eventually be assimilated as an option in get_coherence())
     Parameters
     ------------
@@ -759,7 +695,7 @@ def get_asym_coherence(wf, fs, tauS, xi, fwhm=None, rho=None, N_segs=None):
           waveform input array
         fs: int
           sampling rate of waveform
-        tauS: int
+        nperseg: int
           length (in samples) of each window
         xi: float
           amount (in time) between the start points of adjacent segments
@@ -778,20 +714,20 @@ def get_asym_coherence(wf, fs, tauS, xi, fwhm=None, rho=None, N_segs=None):
         sigmaS = get_sigmaS(fwhm=rho * xi, fs=fs)
 
     # Generate gaussian
-    gaussian = get_window(("gauss", sigmaS), tauS)
-    left_window = np.ones(int(tauS))
-    right_window = np.ones(int(tauS))
-    left_window[int(tauS / 2) :] = gaussian[
-        int(tauS / 2) :
+    gaussian = get_window(("gauss", sigmaS), nperseg)
+    left_window = np.ones(int(nperseg))
+    right_window = np.ones(int(nperseg))
+    left_window[int(nperseg / 2) :] = gaussian[
+        int(nperseg / 2) :
     ]  # Left window starts with ones and ends with gaussian (gaussian on overlapping side)
-    right_window[0 : int(tauS / 2)] = gaussian[0 : int(tauS / 2)]  # Vice versa
+    right_window[0 : int(nperseg / 2)] = gaussian[0 : int(nperseg / 2)]  # Vice versa
 
     # Get STFTs for each side
     f, left_stft = get_stft(
-        wf=wf, fs=fs, tauS=tauS, hop=xi, N_segs=N_segs, win_type=left_window
+        wf=wf, fs=fs, nperseg=nperseg, hop=xi, N_segs=N_segs, win_type=left_window
     )
     f, right_stft = get_stft(
-        wf=wf, fs=fs, tauS=tauS, hop=xi, N_segs=N_segs, win_type=right_window
+        wf=wf, fs=fs, nperseg=nperseg, hop=xi, N_segs=N_segs, win_type=right_window
     )
     # Extract angles
     left_phases = np.angle(left_stft)
@@ -812,7 +748,7 @@ def get_welch(
     wf,
     fs,
     tau=None,
-    tauS=None,
+    nperseg=None,
     hop=None,
     N_segs=None,
     win_type="boxcar",
@@ -851,7 +787,7 @@ def get_welch(
             wf=wf,
             fs=fs,
             tau=tau,
-            tauS=tauS,
+            nperseg=nperseg,
             hop=hop,
             N_segs=N_segs,
             win_type=win_type,
@@ -865,8 +801,8 @@ def get_welch(
     # calculate necessary params from the stft
     N_segs, N_bins = np.shape(stft)
 
-    # Handle possibilities of tau and tauS
-    tau, tauS = param_or_paramS(fs, tau, tauS)
+    # Handle possibilities of tau and nperseg
+    tau, nperseg = param_or_paramS(fs, tau, nperseg)
 
     # initialize array
     segmented_spectrum = np.zeros((N_segs, N_bins))
@@ -878,11 +814,11 @@ def get_welch(
     # average over all segments (in power)
     spectrum = np.mean(segmented_spectrum, 0)
 
-    window = get_window(win_type, tauS)
+    window = get_window(win_type, nperseg)
     S1 = np.sum(window)
     S2 = np.sum(window**2)
-    ENBW = tauS * S2 / S1**2 # In samples
-    U = S2 / tauS
+    ENBW = nperseg * S2 / S1**2 # In samples
+    U = S2 / nperseg
     if scaling == "mags":
         spectrum = np.sqrt(spectrum)
         normalizing_factor = 1 / S1
@@ -893,7 +829,7 @@ def get_welch(
     elif scaling == "density":
         # Start with standard periodogram/spectrum scaling, then divide by bin width (times ENBW in samples)
         bin_width = 1 / tau
-        bin_width = fs / tauS
+        bin_width = fs / nperseg
         normalizing_factor = 1 / S1**2
         normalizing_factor = normalizing_factor /  (ENBW * bin_width)
     
@@ -906,7 +842,7 @@ def get_welch(
     # Except DC bin should NOT be scaled by 2
     spectrum[0] = spectrum[0] / 2
     # Nyquist bin shouldn't either (note this bin only exists if nperseg is even)
-    if tauS % 2 == 0:
+    if nperseg % 2 == 0:
         spectrum[-1] = spectrum[-1] / 2
 
     if not return_dict:
