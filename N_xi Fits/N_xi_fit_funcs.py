@@ -123,7 +123,10 @@ def scale_wf_long_way(wf):
     # First, undo the mic amplifier gain
     gain = 40  # dB
     wf = wf * 10 ** (-gain / 20)
+    gain = 40  # dB
+    wf = wf * 10 ** (-gain / 20)
     # Then account for the calibration factor
+    cal_factor = 0.84
     cal_factor = 0.84
     wf = wf / cal_factor
     # The waveform is now in units of volts, where 1 micro volt = 0dB SPL = 20 micropascals
@@ -135,7 +138,9 @@ def scale_wf_long_way(wf):
     wf_pa = wf * 20 * 1e-6
     # Now, using this version, we would have to do 20*np.log10(dft_mags(wf_pa) / (20*1e-6)) to get dB SPL.)
 
+
     return wf_pa
+
 
 
 def scale_wf(wf):
@@ -160,7 +165,11 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
         wf = sio.loadmat(data_folder + wf_fn)["wf"][:, 0]
 
     if species in ["Anole", "Human"] and scale:
+        wf = sio.loadmat(data_folder + wf_fn)["wf"][:, 0]
+
+    if species in ["Anole", "Human"] and scale:
         wf = scale_wf(wf)
+
 
     # Get fs
     if wf_fn in ["Owl2R1.mat", "Owl7L1.mat"]:
@@ -187,6 +196,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
             becky_good_peak_freqs = [1798, 2143, 2406, 2778]
             bad_peak_freqs = []
 
+
         # Tokays
         case "tokay_GG1rearSOAEwf.mat":  # 0
             seth_good_peak_freqs = [1184, 1572, 3214, 3714]
@@ -200,6 +210,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
         case "tokay_GG4rearSOAEwf.mat":  # 3
             seth_good_peak_freqs = [1104, 2288, 2837, 3160]
             bad_peak_freqs = []
+
 
         # Owls
         case "Owl2R1.mat":  # 0
@@ -243,6 +254,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
     return wf, wf_fn, fs, np.array(good_peak_freqs), np.array(bad_peak_freqs)
 
 
+
 def crop_wf(wf, fs, wf_length, species):
     if species == "Tokay":
         wf_lengthS = round(wf_length * fs)
@@ -255,6 +267,8 @@ def crop_wf(wf, fs, wf_length, species):
     else:  # Just keeping it this way for consistency (it shouldn't matter), will do oeverything the Tokay way if/when we do the final recalc
         wf = wf[: int(wf_length * fs)]
     return wf
+
+
 
 
 def get_fn(species, idx):
@@ -323,7 +337,9 @@ def get_is_signal(
         # Calculate whether we're above noise floor for each xi value
         is_signal[xi_idx] = coherence_value > noise_floor_upper_limit
 
+
     return is_signal, target_coherence, noise_means, noise_stds
+
 
 
 def exp_decay(x, T, amp):
@@ -384,7 +400,7 @@ def fit_peak(
             decay_start_idx = maxima[1]
         case 0:
             print(
-                f"No peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at zero!"
+                f"No peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at first xi!"
             )
             decay_start_idx = 0
         case _:
@@ -393,10 +409,12 @@ def fit_peak(
             )
             decay_start_idx = maxima[-1]
 
+
     # Find first time there is a "minimum" OR a dip below the noise floor
     decayed_idx = -1
     if ddx_thresh_in_num_cycles:
         ddx_thresh = ddx_thresh * freq
+
 
     # Since we use a derivative criteria and it starts at a local max, we should give it a few ms for the derivative to get nice and negative
     ddx_search_buffer_sec = 0.005  # Corresponds to ~5 points since xi=0.001
@@ -416,6 +434,7 @@ def fit_peak(
                 decayed_idx = i
                 break
 
+
     if decayed_idx == -1:
         print(f"Signal at {freq:.0f}Hz never decays!")
     # TEST
@@ -432,6 +451,7 @@ def fit_peak(
     #         decayed_idx = dip_below_noise_floor_idx + minima[0]
     # else:
     #     decayed_idx = dip_below_noise_floor_idx
+
 
     # Curve Fit
     print(f"Fitting exp decay to {freq:.0f}Hz peak on {wf_fn} with rho={rho}")

@@ -17,9 +17,9 @@ for pw in [True]:
             for wf_idx in [3]:
                 print(f"Processing {species} {wf_idx} (rho={rho}, PW={pw})")
 
-                "Get/preprocess waveform" 
+                "Get/preprocess waveform"  
                 wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(
-                    species=species, wf_idx=wf_idx, scale=True
+                    species=species, wf_idx=wf_idx, scale=True, scale=True
                 )
                 hpf_cutoff_freq = 300
                 hpf_type = "spectral"
@@ -49,7 +49,7 @@ for pw in [True]:
                 const_N_pd = 1
 
                 # Output options
-                output_colossogram = 1
+                output_colossogram = 0
                 output_peak_picks = 0
                 output_fits = 0
                 output_bad_fits = 0
@@ -515,4 +515,5 @@ for pw in [True]:
             df_fitted_params.to_excel(rf"{N_xi_fitted_parameters_fn}.xlsx", index=False)
 
         print("Done!")
+
 

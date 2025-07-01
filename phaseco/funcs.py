@@ -57,6 +57,7 @@ def get_stft(
           d["seg_start_indices"] = seg_start_indices
     """
     
+    
         
     
     # Handle C_tau case
@@ -101,9 +102,9 @@ def get_stft(
         window = get_window(win_type, tau)
         # Do rho windowing if rho was passed in (and is not -1)
         if rho is not None and rho != -1:
-            if xi is None:
+            if xiS is None:
                 raise ValueError(
-                    "If you want to do rho-windowing, you need to input xi!"
+                    "If you want to do rho-windowing, you need to input xiS!"
                 )
             fwhmS = rho * xi
             SIGMA = get_SIGMA(fwhmS)  # rho is the proportion of xi which we want the gaussian window's FWHM to be
@@ -303,7 +304,7 @@ def get_coherence(
     if ref_type == "next_seg":
         # Make sure we can reference this xi in this STFT; xi should be an integer number of segs away
         xi_in_num_segs = check_xi_in_num_segs(
-            xi, hop, "xi_in_num_segs"
+            xiS, hop, "xi_in_num_segs"
         )  # Note that in classic case, xi=hop and this is xi/hop=1!
 
         # initialize array for phase diffs; we won't be able to get it for the final few segs though
@@ -365,6 +366,7 @@ def get_coherence(
         coherence, avg_vector_angle = get_avg_vector(phase_diffs, PW=pw)
 
         # Since this references each frequency bin to its adjacent neighbor, we'll plot them w.r.t. the average frequency
+        # this corresponds to shifting everything over half a bin width
         # this corresponds to shifting everything over half a bin width
         bin_width = f[1] - f[0]
         f = f + (bin_width / 2)
@@ -454,7 +456,7 @@ def get_colossogram_coherences(
     f = np.array(rfftfreq(tau*fs, 1 / fs))
     N_bins = len(f)
     # Initialize coherences array
-    coherences = np.zeros((N_bins, len(xis)))
+    coherences = np.zeros((N_bins, len(xiSs)))
 
     if dense_stft:
         # Set the STFT hop according to the minimum xi in this colossogram
@@ -507,12 +509,13 @@ def get_colossogram_coherences(
         # If we're holding it constant, we hold it to the minimum
         N_pd = N_pd_min
         # Even though the *potential* N_pd_max is bigger, we just use N_pd_min all the way so this is also the max
+        # Even though the *potential* N_pd_max is bigger, we just use N_pd_min all the way so this is also the max
         N_pd_max = N_pd_min
 
     # Loop through xis and calculate coherences
     for i, xi in enumerate(tqdm(xis)):
         # If we're above the threshold where dynamic windowing is needed, shut er off!
-        if snapping_rhortle and xi > tau:
+        if snapping_rhortle and xiS > nperseg:
             rho = None
         # Set hop if not already done above
         if not dense_stft:
@@ -520,9 +523,10 @@ def get_colossogram_coherences(
 
         # Get current xi in terms of number of segments
         current_xi_in_num_segs = check_xi_in_num_segs(
-            xi, hop, f"current_xi_in_num_segs for xi={xi}"
+            xiS, hop, f"current_xi_in_num_segs for xiS={xiS}"
         )
 
+        # Calculate N_pd (assuming we're not holding it constant, in which case it was already done outside of loop)
         # Calculate N_pd (assuming we're not holding it constant, in which case it was already done outside of loop)
         if not const_N_pd:
             # This is just as many segments as we possibly can
@@ -539,7 +543,7 @@ def get_colossogram_coherences(
             tau=tau,
             xi=xi,
             hop=hop,
-            rho=rho,
+            dyn_win=dyn_win,
             N_segs=N_segs,
             pw=pw
         )[1]
