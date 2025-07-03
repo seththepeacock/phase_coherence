@@ -19,7 +19,7 @@ for pw in [True]:
 
                 "Get/preprocess waveform"  
                 wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(
-                    species=species, wf_idx=wf_idx, scale=True, scale=True
+                    species=species, wf_idx=wf_idx, scale=True
                 )
                 hpf_cutoff_freq = 300
                 hpf_type = "spectral"
@@ -45,11 +45,10 @@ for pw in [True]:
                 # PW = True # True or None
                 force_recalc_coherences = 0
                 plot_what_we_got = 1 # Only run if we have a pickled coherences dict
-                dense_stft = 1
                 const_N_pd = 1
 
                 # Output options
-                output_colossogram = 0
+                output_colossogram = 1
                 output_peak_picks = 0
                 output_fits = 0
                 output_bad_fits = 0
@@ -188,9 +187,9 @@ for pw in [True]:
                     global_xi_max_s,
                     dyn_win,
                     force_recalc_coherences,
-                    const_N_pd,
-                    dense_stft
+                    const_N_pd
                 )
+                print(fn_id)
                 # Load everything that wasn't explicitly "saved" in the filename
                 coherences = coherences_dict["coherences"]
                 f = coherences_dict["f"]
@@ -198,12 +197,12 @@ for pw in [True]:
                 N_pd_min = coherences_dict["N_pd_min"]
                 N_pd_max = coherences_dict["N_pd_max"]
                 hop = coherences_dict["hop"]
-                # ... This should just be xi_min 
-                xi_min = round(xi_min_s * fs)
-                if hop != xi_min:
+                # ... This should just be xi_min in samples
+                if hop != round(xi_min_s * fs):
                     print(
-                        f"WARNING: hop ({hop}) != xi_min ({xi_min}). These should be the same."
+                        f"WARNING: hop ({hop}) != xi_min ({round(xi_min_s * fs)}). These should be the same."
                     )
+                
                 
                 # Get peak bin indices
                 good_peak_idxs = np.argmin(
@@ -227,9 +226,7 @@ for pw in [True]:
                     rho_str = rf"$\rho={rho}$ - Snapping Rhortle"
                 else:
                     rho_str = rf"$\rho={rho}$"
-                suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{rho_str}]   [$\tau$={tau_s*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [{wf_len}s WF]   [{N_pd_str}]"
-                if dense_stft:
-                    suptitle += f"   [Dense STFT ({hop*1000}ms)]"
+                suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{rho_str}]   [$\tau$={tau_s*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [Hop = {(round(hop / fs))*1000:.2f}ms]   [{wf_len}s WF]   [{N_pd_str}]"
 
                 if output_colossogram:
                     print("Plotting Colossogram")
@@ -240,7 +237,7 @@ for pw in [True]:
                     )
                     for peak_idx in good_peak_idxs:
                         plt.scatter(
-                            xi_min_s * 1000 + (xi_max_ss * 1000) / 50,
+                            xi_min_s * 1000 + (xi_max_s * 1000) / 50,
                             f[peak_idx] / 1000,
                             c="w",
                             marker=">",

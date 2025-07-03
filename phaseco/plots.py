@@ -80,7 +80,7 @@ def coherence_vs_spectrum(wf, sr, tau_s, xi_s=None, bin_shift=1, num_segs=None, 
   if xi_s is None:
     xi_s = tau_s
   # get stft so we don't have to do it twice below
-  d = get_stft(wf=wf, sr=sr, tau=tau_s, seg_spacing=xi_s, num_segs=num_segs, win_type=win_type)
+  d = get_stft(wf=wf, sr=sr, tau=tau_s, seg_spacing=xi_s, num_segs=num_segs, win=win_type)
   stft = d["stft"]
   # we'll want to pass this through the subsequent functions as well to maintain correspondence through all the shifts
   freq_ax = d["freq_ax"]
@@ -91,7 +91,7 @@ def coherence_vs_spectrum(wf, sr, tau_s, xi_s=None, bin_shift=1, num_segs=None, 
   spectrum_freq_ax = p["freq_ax"]
 
   # get coherence
-  c = get_coherence(wf=wf, sr=sr, tau=tau_s, stft=stft, ref_type=ref_type, freq_ax=freq_ax, win_type=win_type, fftshift_segs=fftshift_segs, bin_shift=bin_shift, return_dict=True)
+  c = get_coherence(wf=wf, sr=sr, tau=tau_s, stft=stft, ref_type=ref_type, freq_ax=freq_ax, win=win_type, fftshift_segs=fftshift_segs, bin_shift=bin_shift, return_dict=True)
   coherence = c["coherence"]
   coherence_freq_ax = c["freq_ax"]
 
@@ -439,7 +439,7 @@ def phase_portrait(wf, wf_title="Sum of Oscillators"):
 def scatter_phase_diffs(freq, wf, sr, tau_s, num_segs=None, ref_type="next_freq", win_type='boxcar', bin_shift=1, xi_s=None, fftshift_segs=False, wf_title="Waveform", ax=None):
     xi = xi_s * sr
     tau = tau_s * sr
-    c = get_coherence(wf, ref_type=ref_type, sr=sr, win_type=win_type, num_segs=num_segs, tau=tau, xi=xi, bin_shift=bin_shift, fftshift_segs=fftshift_segs, return_dict=True)
+    c = get_coherence(wf, ref_type=ref_type, sr=sr, win=win_type, num_segs=num_segs, tau=tau, xi=xi, bin_shift=bin_shift, fftshift_segs=fftshift_segs, return_dict=True)
     num_segs = c["num_segs"]
     phase_diffs = c["phase_diffs"]
     # get the freq_bin_index - note this only works if we're using next_freq! Then the 0 index bin is 0 freq, 1 index -> 1/tau, 2 index -> 2/tau

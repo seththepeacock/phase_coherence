@@ -1,5 +1,5 @@
 import numpy as np
-
+from scipy.signal import get_window
 
 
 """
@@ -7,7 +7,7 @@ HELPER FUNCTIONS
 """
 
 
-def get_avg_vector(phase_diffs, PW=None, Pxx=None, Pyy=None):
+def get_avg_vector(phase_diffs):
     """Returns magnitude, phase of vector made by averaging over unit vectors with angles given by input phases
 
     Parameters
@@ -16,97 +16,77 @@ def get_avg_vector(phase_diffs, PW=None, Pxx=None, Pyy=None):
           array of phase differences (N_pd, N_bins)
     """        
     Zs = np.exp(1j * phase_diffs)
-    if PW is not None:
-        Zs = PW * Zs
     avg_vector = np.mean(Zs, axis=0, dtype=complex)
     vec_strength = np.abs(avg_vector)
-    
-    if PW is not None:
-        if Pxx is None or Pyy is None:
-            raise ValueError("Pxx and Pyy must be provided if PW is provided")
-        vec_strength = vec_strength**2 / (Pxx * Pyy)
     
 
     # finally, output the averaged vector's vector strength and angle with x axis (each a 1D array along the frequency axis)
     return vec_strength, np.angle(avg_vector)
 
+def get_phaseco_win(dyn_win, tau, xi, static_win=None, ref_type="next_seg"):
+        if dyn_win is not None:
+            if ref_type != "next_seg":
+                raise ValueError(
+                    f"You passed in a dynamic windowing method but you're using a {ref_type} reference; these were designed for next_seg!"
+                )
+            if static_win is not None:
+                raise ValueError(
+                    "You passed in a dynamic windowing method and a static window; which do we use???"
+                )
+            # Unpack dyn_win
+            match dyn_win[0]:
+                case "rho":
+                    rho, snapping_rhortle = dyn_win[1], dyn_win[2]
+                    if snapping_rhortle and xi > tau:
+                        win = None
+                    else:
+                        desired_fwhm = rho * xi
+                        sigma = desired_fwhm / (2 * np.sqrt(2 * np.log(2)))
+                        win = get_window(("gaussian", sigma), tau)
+                case "eta":
+                    eta, win_type = dyn_win[1], dyn_win[2]
+                    tau = get_tau_from_eta(tau, xi, eta, win_type)
+                    raise ValueError("Haven't implemented eta dynamic windowing yet!")
+                    
+                case _:
+                    raise ValueError(
+                        "Dynamic windowing method must be either 'rho' or 'eta'!"
+                    )
+        elif static_win is not None:
+            # Here we just use the static window since dyn_win was None
+            if isinstance(static_win, str) or (
+                isinstance(static_win, tuple) and isinstance(static_win[0], str)
+            ):
+                # Get window function (boxcar is no window)
+                win = get_window(static_win, tau)
+            else:  # Here we assume static_win was just an array of window coefficients
+                win = static_win
+                if len(win) != tau:
+                    raise Exception(
+                        f"Your window must be the same length as tau (={tau})!"
+                    )
+        else:
+            # Neither was passed, so we just set win to None and get_stft will use a boxcar
+            win = None
 
+        return win, tau # Note that unless explicitly changed via eta windowing, tau just passes through
 
-
-
-
-
-
-def spectral_filter(wf, fs, cutoff_freq, type="hp"):
-    """Filters waveform by zeroing out frequencies above/below cutoff frequency
+def get_tau_from_eta(tau, xi, eta, win_type):
+    """Returns the minimum tau such that the expected coherence for white noise for this window is less than eta
 
     Parameters
     ------------
-        wf: array
-          waveform input array
-        fs: int
-          sample rate of waveform
-        cutoff_freq: float
-          cutoff frequency for filtering
-        type: str, Optional
-          Either 'hp' for high-pass or 'lp' for low-pass
-    """
-    fft_coefficients = np.fft.rfft(wf)
-    frequencies = np.fft.rfftfreq(len(wf), d=1 / fs)
-
-    if type == "hp":
-        # Zero out coefficients from 0 Hz to cutoff_frequency Hz
-        fft_coefficients[frequencies <= cutoff_freq] = 0
-    elif type == "lp":
-        # Zero out coefficients from cutoff_frequency Hz to Nyquist frequency
-        fft_coefficients[frequencies >= cutoff_freq] = 0
-
-    # Compute the inverse real-valued FFT (irfft)
-    filtered_wf = np.fft.irfft(
-        fft_coefficients, n=len(wf)
-    )  # Ensure output length matches input
-
-    return filtered_wf
-
-
-def get_SIGMA(fwhm):
-    """Gets SIGMA for (SciPy get_window) as a function of what you want the Gaussian FWHM to be (in samples)
-
-    Parameters
-    ------------
-        fwhm: float
-          Desired FWHM of the Gaussian window (in samples)
-    """
-    sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
-    return sigma
+    """ 
+    for test_tau in range(tau):
+        win = get_window(win_type, tau)
+        R_w_0 = get_win_autocorr(win, 0)
+        R_w_xi = get_win_autocorr(win, xi)
+        
 
 
 
-# def param_or_PARAM(fs, param, PARAM, name):
-#     if PARAM is None:
-#         if param is None:
-#             raise ValueError(f"We didn't get {name} in either seconds or samples!")
-#         else:
-#             PARAM = round(param * fs)
-#     else:
-#         # check if PARAM is an int
-#         if not isinstance(PARAM, int):
-#             raise ValueError(f"{name}S must be an integer!")
-#         if param is not None:
-#             # Here both param and PARAM have been passed in; check if they're equivalent  
-#             if PARAM != round(param * fs):
-#                 raise ValueError(
-#                     f"You gave both {name}={param} and {name}S={PARAM}, and they're not equivalent for fs={fs}... which do we use?"
-#                 )
-#         else:
-#             param = PARAM / fs
-#     return param, PARAM
-
-
-def check_xi_in_num_segs(xi, hop, name):
-    xi_in_num_segs = xi / hop
-    if np.abs(round(xi_in_num_segs) - (xi_in_num_segs)) > 1e-12:
-        raise Exception(
-            f"For {name}: this xi corresponds to going {xi_in_num_segs} segs away, needs to be an integer! Change XI={xi} or HOP={hop}."
-        )
-    return round(xi_in_num_segs)
+def get_win_autocorr(win, xi):
+    win_0 = win[0:xi]
+    win_delayed = win[xi:]
+    return np.sum(win_0 * win_delayed)
+    

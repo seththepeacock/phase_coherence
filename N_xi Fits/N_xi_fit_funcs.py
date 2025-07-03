@@ -28,7 +28,6 @@ def load_calc_coherences(
     dyn_win,
     force_recalc_coherences,
     const_N_pd,
-    dense_stft,
 ):
     # Unpack parameters
     match dyn_win[0]:
@@ -53,7 +52,7 @@ def load_calc_coherences(
 
     # First, try the old way
     PW_str = f"PW={pw}, " if pw else ""
-    fn_id = rf"{species} {wf_idx}, {PW_str}const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau_s*1000:.0f}ms, max_xi={xi_max_s}, wf_length={wf_len}s, HPF={hpf_cf}Hz, wf={wf_fn.split('.')[0]}"
+    fn_id = rf"{species} {wf_idx}, {PW_str}const_Npd={const_N_pd}, dense_stft=1, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau_s*1000:.0f}ms, max_xi={xi_max_s}, wf_length={wf_len}s, HPF={hpf_cf}Hz, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{fn_id} (Coherences)"
 
     # Get coherences if they exist in the old way
@@ -67,11 +66,12 @@ def load_calc_coherences(
                 rho,
                 N_pd_min,
                 N_pd_max,
-                hop,
+                hop_s,
                 snapping_rhortle,
                 wf_fn,
                 species,
             ) = pickle.load(file)
+            hop = round(hop_s * fs)
         coherences_dict = {
             "coherences": coherences,
             "f": f,
@@ -104,11 +104,11 @@ def load_calc_coherences(
             xi_min,
             xi_max,
             delta_xi=xi_min,
+            hop=xi_min,
             tau=tau,
             dyn_win=dyn_win,
             pw=pw,
             const_N_pd=const_N_pd,
-            dense_stft=dense_stft,
             global_xi_max_s=global_xi_max_s,
             return_dict=True,
         )
