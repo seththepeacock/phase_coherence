@@ -5,9 +5,9 @@ from .funcs import *
 
 
 "Colossogram Plot Function"
-def plot_colossogram(coherences, f, xis, tau=None, title=None, max_khz=None, cmap='magma'):
+def plot_colossogram(coherences, f, xis_s, tau_s=None, title=None, max_khz=None, cmap='magma'):
     # make meshgrid
-    xx, yy = np.meshgrid(xis * 1000, f / 1000) # Note we convert xis to ms and f to kHz
+    xx, yy = np.meshgrid(xis_s * 1000, f / 1000) # Note we convert xis to ms and f to kHz
     
     # plot the heatmap
     vmin = 0
@@ -24,10 +24,10 @@ def plot_colossogram(coherences, f, xis, tau=None, title=None, max_khz=None, cma
     plt.xlabel(rf"$\xi$ [ms]")
     plt.ylabel("Frequency [kHz]")
     if title is None:
-        title = rf"Colossogram with $\tau={tau:.3f}s$" if tau else "Colossogram"
+        title = rf"Colossogram with $\tau={tau_s:.3f}s$" if tau_s else "Colossogram"
     plt.title(title)
 
-def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scaling='density', ref_type="next_win", win_type='boxcar', fftshift_segs=False, khz=False, db=True, downsample_freq=False, 
+def coherence_vs_spectrum(wf, sr, tau_s, xi_s=None, bin_shift=1, num_segs=None, scaling='density', ref_type="next_win", win_type='boxcar', fftshift_segs=False, khz=False, db=True, downsample_freq=False, 
                      xmin=None, xmax=None, ymin=None, ymax=None, wf_title=None, slabel=False, do_coherence=True, do_spectrum=True, do_means=False, ax=None, fig_num=1):
   """ Plots the power spectral density and phase coherence of an input waveform
   ,
@@ -37,9 +37,9 @@ def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scal
         waveform input array
       sr: int
         sample rate of waveform
-      tau: float
+      tau_s: float
         length (in time) of each window
-      xi: float, Optional
+      xi_s: float, Optional
         amount (in time) between the start points of adjacent segments. Defaults to tau (aka no overlap)
       bin_shift: int, Optional
         How many bins over to reference phase against for next_freq, defaults to 1
@@ -77,21 +77,21 @@ def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scal
         If you didn't pass in an Axes, then it will create a figure and this will set the figure number
   """
   # get default for xi
-  if xi is None:
-    xi = tau
+  if xi_s is None:
+    xi_s = tau_s
   # get stft so we don't have to do it twice below
-  d = get_stft(wf=wf, sr=sr, tau=tau, seg_spacing=xi, num_segs=num_segs, win_type=win_type)
+  d = get_stft(wf=wf, sr=sr, tau=tau_s, seg_spacing=xi_s, num_segs=num_segs, win=win_type)
   stft = d["stft"]
   # we'll want to pass this through the subsequent functions as well to maintain correspondence through all the shifts
   freq_ax = d["freq_ax"]
   
   # get (averaged over segments) spectrum
-  p = get_welch(wf=wf, sr=sr, tau=tau, stft=stft, scaling=scaling, win_type=win_type, fftshift_segs=fftshift_segs, freq_ax=freq_ax, return_dict=True)
+  p = get_welch(wf=wf, sr=sr, tau=tau_s, stft=stft, scaling=scaling, win_type=win_type, fftshift_segs=fftshift_segs, freq_ax=freq_ax, return_dict=True)
   spectrum = p["spectrum"]
   spectrum_freq_ax = p["freq_ax"]
 
   # get coherence
-  c = get_coherence(wf=wf, sr=sr, tau=tau, stft=stft, ref_type=ref_type, freq_ax=freq_ax, win_type=win_type, fftshift_segs=fftshift_segs, bin_shift=bin_shift, return_dict=True)
+  c = get_coherence(wf=wf, sr=sr, tau=tau_s, stft=stft, ref_type=ref_type, freq_ax=freq_ax, win=win_type, fftshift_segs=fftshift_segs, bin_shift=bin_shift, return_dict=True)
   coherence = c["coherence"]
   coherence_freq_ax = c["freq_ax"]
 
@@ -127,9 +127,9 @@ def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scal
   # plot + set labels
   if do_coherence:
     if ref_type == "next_freq":
-      label = f"Phase Coherence: tau={tau}, xi={xi}, ref_type={ref_type}, bin_shift={bin_shift}"
+      label = f"Phase Coherence: tau={tau_s}, xi={xi_s}, ref_type={ref_type}, bin_shift={bin_shift}"
     else:
-      label = f"Phase Coherence: tau={tau}, xi={xi}, ref_type={ref_type}"
+      label = f"Phase Coherence: tau={tau_s}, xi={xi_s}, ref_type={ref_type}"
     if slabel:
       label = "Phase Coherence"
     p1 = ax.plot(coherence_freq_ax, coherence, label=label, color='purple')
@@ -163,9 +163,9 @@ def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scal
     wf_title = "Waveform"
   
   if do_means:
-    ax.set_title(f"Phase Coherence, $\langle|\phi_j^{{\theta}}|\rangle$, and spectrum of {wf_title}")
+    ax.set_title(rf"Phase Coherence, $\langle|\phi_j^{{\theta}}|\rangle$, and spectrum of {wf_title}")
   else:
-    ax.set_title(f"Phase Coherence and spectrum of {wf_title}")
+    ax.set_title(rf"Phase Coherence and spectrum of {wf_title}")
 
   # finally, overwrite any default x and y lims (this does nothing if none were inputted)
   ax.set_xlim(left = xmin, right = xmax)
@@ -178,7 +178,7 @@ def coherence_vs_spectrum(wf, sr, tau, xi=None, bin_shift=1, num_segs=None, scal
   return ax, ax2
 
 
-def spectrogram(wf, sr, tau, xi=None, num_segs=None, db=True, fftshift_segs=False, khz=False, cmap='rainbow', vmin=None, vmax=None, scaling='density',
+def spectrogram(wf, sr, tau_s, xi_s=None, num_segs=None, db=True, fftshift_segs=False, khz=False, cmap='rainbow', vmin=None, vmax=None, scaling='density',
                 xmin=0, xmax=None, ymin=None, ymax=None, wf_title=None, show_plot=False, ax=None,fig_num=1):
   
   """ Plots a spectrogram of the waveform
@@ -189,9 +189,9 @@ def spectrogram(wf, sr, tau, xi=None, num_segs=None, db=True, fftshift_segs=Fals
         waveform input array
       sr: int
         sample rate of waveform
-      tau: float
+      tau_s: float
         length (in time) of each window
-      xi: float
+      xi_s: float
         amount (in time) between the start points of adjacent segments. Defaults to tau (aka no overlap)
       num_segs: int, Optional
         If this isn't passed, then it will just get the maximum number of segments of the given size
@@ -219,7 +219,7 @@ def spectrogram(wf, sr, tau, xi=None, num_segs=None, db=True, fftshift_segs=Fals
       fig_num: int, Optional
   """
   # calculate the segmented fft, which outputs three arrays we will use
-  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, fftshift_segs=fftshift_segs, tau=tau, seg_spacing=xi)
+  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, fftshift_segs=fftshift_segs, tau=tau_s, seg_spacing=xi_s)
   # this is the segmented fft itself
   stft = stft_output["stft"]
   # this is the frequency axis
@@ -229,7 +229,7 @@ def spectrogram(wf, sr, tau, xi=None, num_segs=None, db=True, fftshift_segs=Fals
   # to convert these to time, just divide by sample rate 
   t_ax = seg_start_indices / sr
   # calculate the spectrum of each window
-  win_spectrum = get_welch(wf, sr=sr, tau=tau, stft=stft, freq_ax=freq_ax, fftshift_segs=fftshift_segs, scaling=scaling, return_dict=True)["win_spectrum"]
+  win_spectrum = get_welch(wf, sr=sr, tau=tau_s, stft=stft, freq_ax=freq_ax, fftshift_segs=fftshift_segs, scaling=scaling, return_dict=True)["win_spectrum"]
   # make meshgrid
   xx, yy = np.meshgrid(t_ax, freq_ax)
   if khz:
@@ -264,16 +264,16 @@ def spectrogram(wf, sr, tau, xi=None, num_segs=None, db=True, fftshift_segs=Fals
   ax.set_xlim(xmin, xmax)
   ax.set_ylim(ymin, ymax)
   if wf_title:
-      title = f"Spectrogram of {wf_title}: tau={tau}, xi={xi}"
+      title = f"Spectrogram of {wf_title}: tau={tau_s}, xi={xi_s}"
   else: 
-    title = f"Spectrogram: tau={tau}, xi={xi}"
+    title = f"Spectrogram: tau={tau_s}, xi={xi_s}"
   ax.set_title(title)
   
   # optionally show plot!
   if show_plot:
       plt.show()
 
-def coherogram(wf, sr, tau, xi, scope=2, freq_ref_step=1, ref_type="next_win", num_segs=None, fftshift_segs=False, khz=False, cmap='rainbow', vmin=None, vmax=None,
+def coherogram(wf, sr, tau_s, xi_s, scope=2, freq_ref_step=1, ref_type="next_win", num_segs=None, fftshift_segs=False, khz=False, cmap='rainbow', vmin=None, vmax=None,
                 xmin=0, xmax=None, ymin=None, ymax=None, wf_title=None, show_plot=False, ax=None, fig_num=1):
   
   """ Plots a coherogram of the waveform
@@ -283,9 +283,9 @@ def coherogram(wf, sr, tau, xi, scope=2, freq_ref_step=1, ref_type="next_win", n
       wf: array
         waveform input array
       sr: int
-      tau: float
+      tau_s: float
         length (in time) of each window
-      xi: float
+      xi_s: float
         amount (in time) between the start points of adjacent segments. Defaults to tau (aka no overlap)
       ref_type: str, Optional
         determines what to reference the phase of each window against:
@@ -319,7 +319,7 @@ def coherogram(wf, sr, tau, xi, scope=2, freq_ref_step=1, ref_type="next_win", n
   """
 
   # calculate the segmented fft, which outputs three arrays we will use
-  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, tau=tau, seg_spacing=xi, fftshift_segs=fftshift_segs)
+  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, tau=tau_s, seg_spacing=xi_s, fftshift_segs=fftshift_segs)
   # this is the segmented fft itself
   stft = stft_output["stft"]
   # this is the frequency axis
@@ -417,9 +417,9 @@ def coherogram(wf, sr, tau, xi, scope=2, freq_ref_step=1, ref_type="next_win", n
   else:
     ax.set_ylabel("Frequency [Hz]")
   if wf_title:
-      title = f"Coherogram of {wf_title}: ref_type={ref_type}, tau={tau}, xi={xi}, scope={scope}"
+      title = f"Coherogram of {wf_title}: ref_type={ref_type}, tau={tau_s}, xi={xi_s}, scope={scope}"
   else: 
-    title = f"Coherogram: ref_type={ref_type}, tau={tau}, xi={xi}, scope={scope}"
+    title = f"Coherogram: ref_type={ref_type}, tau={tau_s}, xi={xi_s}, scope={scope}"
   if ref_type == "next_freq":
     title = title + f", freq_ref_step={freq_ref_step}"
   ax.set_title(title)
@@ -436,14 +436,16 @@ def phase_portrait(wf, wf_title="Sum of Oscillators"):
   plt.grid()
   plt.show()
   
-def scatter_phase_diffs(freq, wf, sr, tau, num_segs=None, ref_type="next_freq", win_type='boxcar', bin_shift=1, xi=None, fftshift_segs=False, wf_title="Waveform", ax=None):
-    c = get_coherence(wf, ref_type=ref_type, sr=sr, win_type=win_type, num_segs=num_segs, tau=tau, xi=xi, bin_shift=bin_shift, fftshift_segs=fftshift_segs, return_dict=True)
+def scatter_phase_diffs(freq, wf, sr, tau_s, num_segs=None, ref_type="next_freq", win_type='boxcar', bin_shift=1, xi_s=None, fftshift_segs=False, wf_title="Waveform", ax=None):
+    xi = xi_s * sr
+    tau = tau_s * sr
+    c = get_coherence(wf, ref_type=ref_type, sr=sr, win=win_type, num_segs=num_segs, tau=tau, xi=xi, bin_shift=bin_shift, fftshift_segs=fftshift_segs, return_dict=True)
     num_segs = c["num_segs"]
     phase_diffs = c["phase_diffs"]
     # get the freq_bin_index - note this only works if we're using next_freq! Then the 0 index bin is 0 freq, 1 index -> 1/tau, 2 index -> 2/tau
         # so then if freq is 0.8 and tau is 10, the 1 index is 1/10=0.1, the 2 index is 0.2, ... , the 8 index is 0.8. So int(freq*tau) = int(8.0) = 8
         # if you don't know the exact freq bin, rounding up is good... if it looked like ~ 0.84 then int(freq*tau) = int(8.4) = 8
-    freq_bin_index = int(freq*tau)
+    freq_bin_index = int(freq*tau_s)
     
     if ax is None:
       plt.figure(1)
@@ -458,7 +460,9 @@ def scatter_phase_diffs(freq, wf, sr, tau, num_segs=None, ref_type="next_freq", 
     
     print("<|phase diffs|> = " + str(np.mean(np.abs(phase_diffs))))
 
-def scatter_phases(freq, wf, sr, tau, num_segs=None, ref_type="next_freq", bin_shift=1, xi=None, fftshift_segs=False, wf_title="Waveform", ax=None):
+def scatter_phases(freq, wf, sr, tau_s, num_segs=None, ref_type="next_freq", bin_shift=1, xi_s=None, fftshift_segs=False, wf_title="Waveform", ax=None):
+    tau = tau_s * sr
+    xi = xi_s * sr
     c = get_coherence(wf, ref_type=ref_type, sr=sr, num_segs=num_segs, tau=tau, xi=xi, bin_shift=bin_shift, fftshift_segs=fftshift_segs, return_dict=True)
     num_segs = c["num_segs"]
     phases = c["phases"]

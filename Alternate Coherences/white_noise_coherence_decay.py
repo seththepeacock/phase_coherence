@@ -178,3 +178,30 @@ for nrealizations in [10]:
         plt.savefig(f"Alternate Coherences\Figs\{title}.png")
         plt.show()
         
+
+
+
+# def get_csd(x, y, fs, tau, hop=None, win_type='boxcar'):
+#     window = get_window(win_type, tau)
+
+#     if hop is None:
+#         hop = tau # non-overlapping
+
+#     noverlap = tau - hop
+
+#     SFT = ShortTimeFFT(window, hop, fs, fft_mode='onesided', scale_to=None, phase_shift=None)
+
+#     # Compute spectrogram: csd uses y, x (note reversed order)
+#     Pxy = SFT.spectrogram(y, x, p0=0, p1=(len(x) - noverlap) // hop, k_offset=tau // 2)
+
+#     # Apply onesided doubling (if real and return_onesided=True)
+#     if np.isrealobj(x) and SFT.fft_mode == 'onesided':
+#         Pxy[1:-1 if SFT.mfft % 2 == 0 else None, :] *= 2
+
+#     # Average across time segments (axis=1 if time is columns)
+#     Pxy = np.mean(Pxy, axis=1)
+
+#     # Normalize (done already)
+#     Pxy /= fs * np.sum(window ** 2)
+    
+#     return SFT.f, Pxy

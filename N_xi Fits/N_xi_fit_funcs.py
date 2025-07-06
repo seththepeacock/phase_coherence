@@ -13,33 +13,46 @@ from phaseco import *
 def load_calc_coherences(
     wf,
     wf_idx,
-    species,
     wf_fn,
-    pkl_folder,
-    PW,
-    snapping_rhortle,
-    nperseg,
-    tau,
-    min_xiS,
-    max_xiS,
-    min_xi,
-    max_xi,
-    global_max_xi,
-    fs,
     wf_len,
-    hpf_cutoff_freq,
-    hpf_delta_f,
-    hpf_ripple,
-    dyn_win_type,
-    dyn_win_param,
+    species,
+    fs,
+    hpf,
+    pkl_folder,
+    pw,
+    tau,
+    tau_s,
+    xi_min_s,
+    xi_max_s,
+    global_xi_max_s,
+    dyn_win,
     force_recalc_coherences,
     const_N_pd,
-    dense_stft,
 ):
+    # Unpack parameters
+    match dyn_win[0]:
+        case "rho":
+            dyn_win_meth, rho, snapping_rhortle = dyn_win
+            dyn_win_str = rf"(rho={rho}, SR={snapping_rhortle})"
+        case "eta":
+            dyn_win_meth, eta, win_type = dyn_win
+            dyn_win_str = rf"(eta={eta}, {win_type})"
+            rho = np.nan
+    match hpf[0]:
+        case "spectral":
+            hpf_type, hpf_cf = hpf
+            hpf_str = rf"({hpf_cf}Hz cf)"
+        case "kaiser":
+            hpf_type, hpf_cf, hpf_df, hpf_rip = hpf
+            hpf_str = rf"({hpf_cf}Hz cf, {hpf_df}Hz df, {hpf_rip}dB rip)"
+
+    # Convert to samples
+    xi_min = xi_min_s * fs
+    xi_max = xi_max_s * fs
+
     # First, try the old way
-    rho = dyn_win_param if dyn_win_type == "rho" else "NA"
-    PW_str = f"PW={PW}, " if PW else ""
-    fn_id = rf"{species} {wf_idx}, {PW_str}const_Npd={const_N_pd}, dense_stft={dense_stft}, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau*1000:.0f}ms, max_xi={max_xi}, wf_length={wf_len}s, HPF={hpf_cutoff_freq}Hz, wf={wf_fn.split('.')[0]}"
+    PW_str = f"PW={pw}, " if pw else ""
+    fn_id = rf"{species} {wf_idx}, {PW_str}const_Npd={const_N_pd}, dense_stft=1, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau_s*1000:.0f}ms, max_xi={xi_max_s}, wf_length={wf_len}s, HPF={hpf_cf}Hz, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{fn_id} (Coherences)"
 
     # Get coherences if they exist in the old way
@@ -48,21 +61,22 @@ def load_calc_coherences(
             (
                 coherences,
                 f,
-                xis,
-                tau,
+                xis_s,
+                tau_s,
                 rho,
                 N_pd_min,
                 N_pd_max,
-                hop,
+                hop_s,
                 snapping_rhortle,
                 wf_fn,
                 species,
             ) = pickle.load(file)
-        return {
+            hop = round(hop_s * fs)
+        coherences_dict = {
             "coherences": coherences,
             "f": f,
-            "xis": xis,
-            "tau": tau,
+            "xis_s": xis_s,
+            "tau_s": tau_s,
             "rho": rho,
             "N_pd_min": N_pd_min,
             "N_pd_max": N_pd_max,
@@ -71,11 +85,10 @@ def load_calc_coherences(
             "wf_fn": wf_fn,
             "species": species,
         }
+        return coherences_dict, fn_id
 
     # Now, we know they don't exist, so we try the new way
-    dyn_win_str = f"({dyn_win_type}, {dyn_win_param})"
-    hpf_str = f"({hpf_cutoff_freq}Hz cf, {hpf_delta_f}Hz df, {hpf_ripple}dB rip)"
-    fn_id = rf"{species} {wf_idx}, PW={PW}, dyn_win={dyn_win_str}, HPF={hpf_str}, SR={snapping_rhortle}, tau={tau*1000:.0f}ms, min_xi={min_xi}, max_xi={max_xi}, wf_len={wf_len}s, wf={wf_fn.split('.')[0]}"
+    fn_id = rf"{species} {wf_idx}, PW={pw}, dyn_win={dyn_win_str}, HPF={hpf_str}, tau={tau_s*1000:.0f}ms, xi_min={xi_min_s*1000:.0f}ms, xi_max={xi_max_s*1000:.0f}ms, wf_len={wf_len}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{fn_id} (Coherences)"
 
     # Get coherences if they exist in the new way
@@ -88,31 +101,32 @@ def load_calc_coherences(
         coherences_dict = get_colossogram_coherences(
             wf,
             fs,
-            min_xiS,
-            max_xiS,
-            delta_xiS=min_xiS,
-            nperseg=nperseg,
-            dyn_win=(dyn_win_type, dyn_win_param),
-            PW=PW,
+            xi_min,
+            xi_max,
+            delta_xi=xi_min,
+            hop=xi_min,
+            tau=tau,
+            dyn_win=dyn_win,
+            pw=pw,
             const_N_pd=const_N_pd,
-            dense_stft=dense_stft,
-            global_max_xi=global_max_xi,
-            snapping_rhortle=snapping_rhortle,
+            global_xi_max_s=global_xi_max_s,
             return_dict=True,
-        ) 
-               
+        )
+
         with open(pkl_folder + pkl_fn + ".pkl", "wb") as file:
             pickle.dump(coherences_dict, file)
-    # Add the xis to the dict we're returning for easy compatibility with old code
-    coherences_dict["xis"] = coherences_dict["xiSs"] / fs
     # We now have coherences_dict either from the pickle or from the calculation; return it!
-    return coherences_dict
+    return coherences_dict, fn_id
+
 
 def scale_wf_long_way(wf):
     # First, undo the mic amplifier gain
     gain = 40  # dB
     wf = wf * 10 ** (-gain / 20)
+    gain = 40  # dB
+    wf = wf * 10 ** (-gain / 20)
     # Then account for the calibration factor
+    cal_factor = 0.84
     cal_factor = 0.84
     wf = wf / cal_factor
     # The waveform is now in units of volts, where 1 micro volt = 0dB SPL = 20 micropascals
@@ -124,12 +138,14 @@ def scale_wf_long_way(wf):
     wf_pa = wf * 20 * 1e-6
     # Now, using this version, we would have to do 20*np.log10(dft_mags(wf_pa) / (20*1e-6)) to get dB SPL.)
 
+
     return wf_pa
+
 
 
 def scale_wf(wf):
     # Proven this is equivalent to above
-    factor = (20 * 0.01) / 0.84 
+    factor = (20 * 0.01) / 0.84
     return wf * factor
 
 
@@ -149,7 +165,11 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
         wf = sio.loadmat(data_folder + wf_fn)["wf"][:, 0]
 
     if species in ["Anole", "Human"] and scale:
+        wf = sio.loadmat(data_folder + wf_fn)["wf"][:, 0]
+
+    if species in ["Anole", "Human"] and scale:
         wf = scale_wf(wf)
+
 
     # Get fs
     if wf_fn in ["Owl2R1.mat", "Owl7L1.mat"]:
@@ -176,6 +196,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
             becky_good_peak_freqs = [1798, 2143, 2406, 2778]
             bad_peak_freqs = []
 
+
         # Tokays
         case "tokay_GG1rearSOAEwf.mat":  # 0
             seth_good_peak_freqs = [1184, 1572, 3214, 3714]
@@ -189,6 +210,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
         case "tokay_GG4rearSOAEwf.mat":  # 3
             seth_good_peak_freqs = [1104, 2288, 2837, 3160]
             bad_peak_freqs = []
+
 
         # Owls
         case "Owl2R1.mat":  # 0
@@ -232,6 +254,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
     return wf, wf_fn, fs, np.array(good_peak_freqs), np.array(bad_peak_freqs)
 
 
+
 def crop_wf(wf, fs, wf_length, species):
     if species == "Tokay":
         wf_lengthS = round(wf_length * fs)
@@ -244,6 +267,8 @@ def crop_wf(wf, fs, wf_length, species):
     else:  # Just keeping it this way for consistency (it shouldn't matter), will do oeverything the Tokay way if/when we do the final recalc
         wf = wf[: int(wf_length * fs)]
     return wf
+
+
 
 
 def get_fn(species, idx):
@@ -286,12 +311,11 @@ def get_fn(species, idx):
 
 
 def get_is_signal(
-    coherences, f, xis, f_peak_idx, f_noise=0, noise_floor_bw_factor=None
+    coherences, f, xis_s, target_coherence, f_noise=0, noise_floor_bw_factor=None
 ):
     if noise_floor_bw_factor is None:
         raise ValueError("You must input noise_floor_bw_factor!")
-    # Get the coherence slice we care about
-    target_coherence = coherences[f_peak_idx, :]
+
     # find frequency bin index closest to our cutoff (NOW JUST 0)
     f_noise_idx = (np.abs(f - f_noise)).argmin()
     # Get mean and std dev of coherence (over frequency axis, axis=0) for each xi value (using ALL frequencies)
@@ -300,20 +324,22 @@ def get_is_signal(
         coherences[f_noise_idx:, :], axis=0, ddof=1
     )  # ddof=1 since we're using sample mean (not true mean) in sample std estimate
     # Now for each xi value, see if it's noise by determining if it's noise_floor_bw_factor*sigma away from the mean
-    is_signal = np.full(len(xis), True, dtype=bool)
+    is_signal = np.full(len(xis_s), True, dtype=bool)
 
-    for xi_idx in range(len(xis)):
+    for xi_idx in range(len(xis_s)):
         if xi_idx < 5:
             is_signal[xi_idx] = True
             continue
-        coherence_value = coherences[f_peak_idx, xi_idx]
+        coherence_value = target_coherence[xi_idx]
         noise_floor_upper_limit = (
             noise_means[xi_idx] + noise_floor_bw_factor * noise_stds[xi_idx]
         )
         # Calculate whether we're above noise floor for each xi value
         is_signal[xi_idx] = coherence_value > noise_floor_upper_limit
 
+
     return is_signal, target_coherence, noise_means, noise_stds
+
 
 
 def exp_decay(x, T, amp):
@@ -330,12 +356,14 @@ def fit_peak(
     bounds,
     p0,
     coherences,
-    xis,
+    xis_s,
     wf_fn,
     rho,
     ddx_thresh,
     ddx_thresh_in_num_cycles,
 ):
+    # Get the coherence slice we care about
+    target_coherence = coherences[f_peak_idx, :]
 
     if sigma_weighting_power == 0:
         get_fit_sigma = lambda y, sigma_weighting_power: np.ones(len(y))
@@ -344,15 +372,19 @@ def fit_peak(
             y**sigma_weighting_power + 1e-9
         )
     # Calculate signal vs noise and point of decay
-    is_signal, target_coherence, noise_means, noise_stds = get_is_signal(
-        coherences, f, xis, f_peak_idx, noise_floor_bw_factor=noise_floor_bw_factor
+    is_signal, noise_means, noise_stds = get_is_signal(
+        coherences,
+        f,
+        xis_s,
+        target_coherence,
+        noise_floor_bw_factor=noise_floor_bw_factor,
     )
     is_noise = ~is_signal
     # Get target frequency
     freq = f[f_peak_idx]
 
     # Find where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi]
-    decay_start_max_xi_idx = np.argmin(np.abs(xis - decay_start_max_xi))
+    decay_start_max_xi_idx = np.argmin(np.abs(xis_s - decay_start_max_xi))
     maxima = find_peaks(target_coherence[:decay_start_max_xi_idx], prominence=0.01)[0]
     num_maxima = len(maxima)
     match num_maxima:
@@ -368,7 +400,7 @@ def fit_peak(
             decay_start_idx = maxima[1]
         case 0:
             print(
-                f"No peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at zero!"
+                f"No peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at first xi!"
             )
             decay_start_idx = 0
         case _:
@@ -377,16 +409,18 @@ def fit_peak(
             )
             decay_start_idx = maxima[-1]
 
+
     # Find first time there is a "minimum" OR a dip below the noise floor
     decayed_idx = -1
     if ddx_thresh_in_num_cycles:
         ddx_thresh = ddx_thresh * freq
 
+
     # Since we use a derivative criteria and it starts at a local max, we should give it a few ms for the derivative to get nice and negative
     ddx_search_buffer_sec = 0.005  # Corresponds to ~5 points since xi=0.001
-    decay_start_sec = xis[decay_start_idx]
-    ddx_search_start_sec = decay_start_sec + ddx_search_buffer_sec
-    ddx_search_start_idx = np.argmin(np.abs(xis - ddx_search_start_sec))
+    decay_start_s = xis_s[decay_start_idx]
+    ddx_search_start_s = decay_start_s + ddx_search_buffer_sec
+    ddx_search_start_idx = np.argmin(np.abs(xis_s - ddx_search_start_s))
 
     for i in range(ddx_search_start_idx, len(target_coherence) - 1):
         if not is_signal[i]:
@@ -394,11 +428,12 @@ def fit_peak(
             break
         else:
             ddx = (target_coherence[i + 1] - target_coherence[i]) / (
-                xis[i + 1] - xis[i]
+                xis_s[i + 1] - xis_s[i]
             )
             if ddx > ddx_thresh:
                 decayed_idx = i
                 break
+
 
     if decayed_idx == -1:
         print(f"Signal at {freq:.0f}Hz never decays!")
@@ -417,20 +452,21 @@ def fit_peak(
     # else:
     #     decayed_idx = dip_below_noise_floor_idx
 
+
     # Curve Fit
     print(f"Fitting exp decay to {freq:.0f}Hz peak on {wf_fn} with rho={rho}")
     # Crop arrays to the fit range
-    xis_fit_crop = xis[decay_start_idx:decayed_idx]
+    xis_s_fit_crop = xis_s[decay_start_idx:decayed_idx]
     target_coherence_fit_crop = target_coherence[decay_start_idx:decayed_idx]
     sigma = get_fit_sigma(target_coherence_fit_crop, sigma_weighting_power)
     failures = 0
     popt = None
 
-    while len(xis_fit_crop) > trim_step and popt is None:
+    while len(xis_s_fit_crop) > trim_step and popt is None:
         try:
             popt, pcov = curve_fit(
                 exp_decay,
-                xis_fit_crop,
+                xis_s_fit_crop,
                 target_coherence_fit_crop,
                 p0=p0,
                 sigma=sigma,
@@ -440,18 +476,18 @@ def fit_peak(
         except (RuntimeError, ValueError) as e:
             # Trim the x, y,
             failures += 1
-            xis_fit_crop = xis_fit_crop[trim_step:-trim_step]
+            xis_s_fit_crop = xis_s_fit_crop[trim_step:-trim_step]
             target_coherence_fit_crop = target_coherence_fit_crop[trim_step:-trim_step]
             sigma = sigma[trim_step:-trim_step]
 
             print(
-                f"Fit failed (attempt {failures}): — trimmed to {len(xis_fit_crop)} points"
+                f"Fit failed (attempt {failures}): — trimmed to {len(xis_s_fit_crop)} points"
             )
 
     # HAndle case where curve fit fails
     if popt is None:
         print(f"Curve fit failed after all attempts ({freq:.0f}Hz from {wf_fn})")
-        T, T_std, A, A_std, mse, xis_fit_crop, fitted_exp_decay = (
+        T, T_std, A, A_std, mse, xis_s_fit_crop, fitted_exp_decay = (
             -1,
             -1,
             -1,
@@ -469,7 +505,7 @@ def fit_peak(
         A = popt[1]
         A_std = perr[1]
         # Get the fitted exponential decay
-        fitted_exp_decay = exp_decay(xis_fit_crop, *popt)
+        fitted_exp_decay = exp_decay(xis_s_fit_crop, *popt)
 
         # Calculate MSE
         mse = np.mean((fitted_exp_decay - target_coherence_fit_crop) ** 2)
@@ -485,7 +521,7 @@ def fit_peak(
         decay_start_idx,
         decayed_idx,
         target_coherence,
-        xis_fit_crop,
+        xis_s_fit_crop,
         fitted_exp_decay,
         noise_means,
         noise_stds,

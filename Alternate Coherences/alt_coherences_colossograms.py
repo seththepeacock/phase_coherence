@@ -156,7 +156,7 @@ for hop in [xis[1]]:
             }
             power_weights = True
             stft_dict = None
-            d = get_coherence(x_full, fs, xiS=xiS, tauS=tauS, hopS=hopS, win_type=win_type, power_weights=power_weights, reuse_stft=stft_dict, return_dict=True)
+            d = get_coherence(x_full, fs, xiS=xiS, tauS=tauS, hopS=hopS, win=win_type, power_weights=power_weights, reuse_stft=stft_dict, return_dict=True)
             f, Cxy, N_pd = d['f'], d['coherence'], d['N_pd']
             
             coherences['phaseco_weighted'][:, xi_idx] = Cxy

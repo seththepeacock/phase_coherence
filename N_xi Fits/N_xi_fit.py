@@ -8,20 +8,22 @@ import matplotlib.patheffects as pe
 from tqdm import tqdm
 from collections import defaultdict
 import pandas as pd
-for PW in [True]:
+for pw in [True]:
     for species in ["Human"]:
         for rho in [0.5]:
             # Initialize list for row dicts for xlsx file
             rows = []
 
             for wf_idx in [3]:
-                print(f"Processing {species} {wf_idx} (rho={rho}, PW={PW})")
+                print(f"Processing {species} {wf_idx} (rho={rho}, PW={pw})")
 
-                "Get/preprocess waveform" 
+                "Get/preprocess waveform"  
                 wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(
                     species=species, wf_idx=wf_idx, scale=True
                 )
                 hpf_cutoff_freq = 300
+                hpf_type = "spectral"
+                hpf = (hpf_type, hpf_cutoff_freq)
                 # Apply a high pass filter
                 wf = spectral_filter(wf, fs, hpf_cutoff_freq, type="hp")
                 # Crop to desired length
@@ -33,25 +35,25 @@ for PW in [True]:
                 # Coherence Parameters
                 # rho = None
                 snapping_rhortle = 0
-                tau = 2**13 / 44100  # Everyone uses the same tau
-                nperseg = int(
-                    tau * fs
+                dyn_win = ("rho", rho, snapping_rhortle)
+                tau_s = 2**13 / 44100  # Everyone uses the same tau_s
+                tau = round(
+                    tau_s * fs
                 )  # This is just 2**13 for efficient FFT implementation, unless fs!=44100
-                min_xi = 0.001
-                delta_xi = min_xi
+                xi_min_s = 0.001
+                delta_xi_s = xi_min_s
                 # PW = True # True or None
                 force_recalc_coherences = 0
-                plot_what_we_got = 0 # Only run if we have a pickled coherences dict
-                dense_stft = 1
+                plot_what_we_got = 1 # Only run if we have a pickled coherences dict
                 const_N_pd = 1
 
                 # Output options
-                output_colossogram = 0
+                output_colossogram = 1
                 output_peak_picks = 0
                 output_fits = 0
                 output_bad_fits = 0
                 output_spreadsheet = 0
-                show_plots = 0
+                show_plots = 1
 
                 # Fitting Parameters
                 trim_step = 1
@@ -101,13 +103,13 @@ for PW in [True]:
                 # Maximum xi value
                 # TEST
                 # max_xis = {"Anole": 0.1, "Owl": 0.1, "Human": 1.5, "Tokay": 0.1}
-                max_xis = {"Anole": 0.1, "Owl": 0.1, "Human": 0.01, "Tokay": 0.1}
+                xi_max_ss = {"Anole": 0.1, "Owl": 0.1, "Human": 0.01, "Tokay": 0.1}
 
                 # Maximum frequency to plot (in khz)
                 max_khzs = {"Anole": 6, "Tokay": 6, "Human": 10, "Owl": 12}
 
                 # This determines where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi]
-                decay_start_max_xis = {
+                decay_start_xi_max_ss = {
                     "Anole": 0.02,
                     "Tokay": 0.02,
                     "Owl": 0.02,
@@ -135,9 +137,9 @@ for PW in [True]:
 
                 # Get species-specific params
 
-                decay_start_max_xi = decay_start_max_xis[species]
+                decay_start_xi_max_ss = decay_start_xi_max_ss[species]
                 max_khz = max_khzs[species]
-                max_xi = max_xis[species]
+                xi_max_s = xi_max_ss[species]
                 noise_floor_bw_factor = noise_floor_bw_factors[species]
                 ddx_thresh = (
                     ddx_threshes_num_cycles[species]
@@ -145,13 +147,13 @@ for PW in [True]:
                     else ddx_threshes[species]
                 )
 
-                global_max_xi = max(max_xis.values()) if const_N_pd else None
+                global_xi_max_s = max(xi_max_ss.values()) if const_N_pd else None
 
                 "Make directories"
                 N_xi_folder = r"N_xi Fits/"
                 pkl_folder = N_xi_folder + r"Pickles/"
-                results_folder = N_xi_folder + rf"Results (rho={rho}, PW={PW})/"
-                all_results_folder = N_xi_folder + rf"Results (All rho)/"
+                results_folder = N_xi_folder + rf"Results/Results (rho={rho}, PW={pw})/"
+                all_results_folder = N_xi_folder + rf"Results/Results (All rho)/"
                 
                 os.makedirs(results_folder, exist_ok=True)
                 os.makedirs(pkl_folder, exist_ok=True)
@@ -159,59 +161,49 @@ for PW in [True]:
                 os.makedirs(N_xi_folder + r"Additional Figures/", exist_ok=True)
 
                 
-                # Raise warning if nperseg is not a power of two AND the samplerate is indeed 44100
-                if np.log2(nperseg) != int(np.log2(nperseg)) and fs == 44100:
+                # Raise warning if tau is not a power of two AND the samplerate is indeed 44100
+                if np.log2(tau) != int(np.log2(tau)) and fs == 44100:
                     raise ValueError(
-                        "nperseg is not a power of 2, but the samplerate is 44100!"
+                        "tau is not a power of 2, but the samplerate is 44100!"
                     )
                 
 
-                "Calculate/load things"
+                "Calculate/load things"                
                 # This will either load it if it's there or calculate it (and pickle it) if not
-                coherences_dict = load_calc_coherences(
+                coherences_dict, fn_id = load_calc_coherences(
                     wf,
                     wf_idx,
-                    species,
                     wf_fn,
-                    pkl_folder,
-                    PW,
-                    snapping_rhortle,
-                    nperseg,
-                    tau,
-                    min_xiS,
-                    max_xiS,
-                    min_xi,
-                    max_xi,
-                    global_max_xi,
-                    fs,
                     wf_len,
-                    hpf_cutoff_freq,
-                    hpf_delta_f,
-                    hpf_ripple,
-                    dyn_win_type,
-                    dyn_win_param,
+                    species,
+                    fs,
+                    hpf,
+                    pkl_folder,
+                    pw,
+                    tau,
+                    tau_s,
+                    xi_min_s,
+                    xi_max_s,
+                    global_xi_max_s,
+                    dyn_win,
                     force_recalc_coherences,
-                    const_N_pd,
-                    dense_stft,
+                    const_N_pd
                 )
+                print(fn_id)
                 # Load everything that wasn't explicitly "saved" in the filename
                 coherences = coherences_dict["coherences"]
                 f = coherences_dict["f"]
+                xis_s = coherences_dict["xis_s"]
                 N_pd_min = coherences_dict["N_pd_min"]
                 N_pd_max = coherences_dict["N_pd_max"]
-                hop = coherences_dict["hop"] # This should just be min_xiS
-                if hop != min_xiS:
+                hop = coherences_dict["hop"]
+                # ... This should just be xi_min in samples
+                if hop != round(xi_min_s * fs):
                     print(
-                        f"WARNING: hop ({hop}) != min_xiS ({min_xiS}). This should be the same."
+                        f"WARNING: hop ({hop}) != xi_min ({round(xi_min_s * fs)}). These should be the same."
                     )
-                # Get xis (this logic is to handle the old pickles)
-                if "xiSs" in coherences_dict:
-                    xiSs = coherences_dict["xiSs"]
-                    xis = xiSs / fs
-                else:
-                    xis = coherences_dict["xis"]
-                    
-
+                
+                
                 # Get peak bin indices
                 good_peak_idxs = np.argmin(
                     np.abs(f[:, None] - good_peak_freqs[None, :]), axis=0
@@ -227,27 +219,25 @@ for PW in [True]:
                         raise Exception(
                             "If N_pd is constant, then N_pd_min and N_pd_max should be equal..."
                         )
-                    N_pd_str = f"$N_{{pd}}={N_pd_min}$"
+                    N_pd_str = rf"$N_{{pd}}={N_pd_min}$"
                 else:
-                    N_pd_str = f"$N_{{pd}} \in [{N_pd_min}, {N_pd_max}]$"
+                    N_pd_str = rf"$N_{{pd}} \in [{N_pd_min}, {N_pd_max}]$"
                 if snapping_rhortle:
                     rho_str = rf"$\rho={rho}$ - Snapping Rhortle"
                 else:
                     rho_str = rf"$\rho={rho}$"
-                suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{rho_str}]   [$\tau$={tau*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={max_xi*1000:.0f}$ms]   [{wf_len}s WF]   [{N_pd_str}]"
-                if dense_stft:
-                    suptitle += f"   [Dense STFT ({hop*1000}ms)]"
+                suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{rho_str}]   [$\tau$={tau_s*1000:.2f}ms]   [HPF at {hpf_cutoff_freq}Hz]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [Hop = {(round(hop / fs))*1000:.2f}ms]   [{wf_len}s WF]   [{N_pd_str}]"
 
                 if output_colossogram:
                     print("Plotting Colossogram")
                     plt.close("all")
                     plt.figure(figsize=(15, 5))
                     plot_colossogram(
-                        coherences, f, xis, tau, max_khz=max_khz, cmap="magma"
+                        coherences, f, xis_s, tau_s, max_khz=max_khz, cmap="magma"
                     )
                     for peak_idx in good_peak_idxs:
                         plt.scatter(
-                            min_xi * 1000 + (max_xi * 1000) / 50,
+                            xi_min_s * 1000 + (xi_max_s * 1000) / 50,
                             f[peak_idx] / 1000,
                             c="w",
                             marker=">",
@@ -257,9 +247,9 @@ for PW in [True]:
                     plt.title(f"Colossogram", fontsize=18)
                     plt.suptitle(suptitle, fontsize=10)
                     for folder in [results_folder, all_results_folder]:
-                        os.makedirs(f"{folder}\Colossograms", exist_ok=True)
+                        os.makedirs(rf"{folder}\Colossograms", exist_ok=True)
                         plt.savefig(
-                            f"{folder}\Colossograms\{fn_id} (Colossogram).png", dpi=300
+                            rf"{folder}\Colossograms\{fn_id} (Colossogram).png", dpi=300
                         )
                     if show_plots:
                         plt.show()
@@ -267,15 +257,15 @@ for PW in [True]:
                 if output_peak_picks:
                     print("Plotting Peak Picks")
                     target_xi = 0.01
-                    xi_idx = np.argmin(np.abs(xis - target_xi))
+                    xi_idx = np.argmin(np.abs(xis_s - target_xi))
                     coherence_slice = coherences[:, xi_idx]
-                    psd = get_welch(wf=wf, fs=fs, nperseg=nperseg)[1]
+                    psd = get_welch(wf=wf, fs=fs, tau=tau)[1]
                     plt.close("all")
                     plt.figure(figsize=(11, 8))
                     plt.suptitle(suptitle)
                     # Coherence slice plot
                     plt.subplot(2, 1, 1)
-                    plt.title(rf"Colossogram Slice at $\xi={xis[xi_idx]:.3f}$")
+                    plt.title(rf"Colossogram Slice at $\xi={xis_s[xi_idx]:.3f}$")
                     plt.plot(
                         f / 1000, coherence_slice, label=r"$C_{\xi}$, $\xi={target_xi}$"
                     )
@@ -300,14 +290,14 @@ for PW in [True]:
                     plt.xlim(0, max_khz)
                     plt.tight_layout()
                     plt.savefig(
-                        f"{results_folder}\Peak Picks\{fn_id} (Peak Picks).png", dpi=300
+                        rf"{results_folder}\Peak Picks\{fn_id} (Peak Picks).png", dpi=300
                     )
                     if show_plots:
                         plt.show()
 
                 "FITTING"
                 if output_fits:
-                    print(f"Fitting {wf_fn}")
+                    print(rf"Fitting {wf_fn}")
                     # Get becky's dataframe
                     if species != "Tokay":
                         df = get_spreadsheet_df(wf_fn, species)
@@ -347,13 +337,13 @@ for PW in [True]:
                                 f,
                                 peak_idx,
                                 noise_floor_bw_factor,
-                                decay_start_max_xi,
+                                decay_start_xi_max_ss,
                                 trim_step,
                                 sigma_weighting_power,
                                 bounds,
                                 p0,
                                 coherences,
-                                xis,
+                                xis_s,
                                 wf_fn,
                                 rho,
                                 ddx_thresh,
@@ -372,7 +362,7 @@ for PW in [True]:
                                 decay_start_idx,
                                 decayed_idx,
                                 target_coherence,
-                                xis_fit_crop,
+                                xis_s_fit_crop,
                                 fitted_exp_decay,
                                 noise_means,
                                 noise_stds,
@@ -383,9 +373,9 @@ for PW in [True]:
                             freq = f[peak_idx]
                             N_xi = T * freq
                             N_xi_std = T_std * freq
-                            xis_num_cycles = xis * freq
+                            xis_num_cycles = xis_s * freq
 
-                            xis_fit_crop_num_cycles = xis_fit_crop * freq
+                            xis_num_cycles_fit_crop = xis_s_fit_crop * freq
 
                             # Plot the fit
                             plt.subplot(2, 2, subplot_idx)
@@ -402,7 +392,7 @@ for PW in [True]:
                                     fit_label = ""
                                     print("One or more params is infinite!")
                                 plt.plot(
-                                    xis_fit_crop_num_cycles,
+                                    xis_num_cycles_fit_crop,
                                     fitted_exp_decay,
                                     color=color,
                                     label=fit_label,
@@ -445,14 +435,14 @@ for PW in [True]:
                             if plot_noise_on_fits:
                                 # plt.scatter(xis_num_cycles, noise_means, label='Noise Mean (Above 12kHz)', s=1, color=colors[4])
                                 noise_floor_bw_factor_str = (
-                                    f"(\sigma*{noise_floor_bw_factor})"
+                                    rf"(\sigma*{noise_floor_bw_factor})"
                                     if noise_floor_bw_factor != 1
-                                    else "\sigma"
+                                    else r"\sigma"
                                 )
                                 plt.plot(
                                     xis_num_cycles,
                                     noise_means,
-                                    label=f"All Bins $\mu \pm {noise_floor_bw_factor_str}$",
+                                    label=rf"All Bins $\mu \pm {noise_floor_bw_factor_str}$",
                                     color=colors[4],
                                 )
                                 plt.fill_between(
@@ -505,7 +495,7 @@ for PW in [True]:
                         # fits_folder = f'{fig_folder}' if good_peaks else 'Additional Figures'
                         fits_str = f"Fits" if good_peaks else "Bad Fits"
                         for folder in [results_folder, all_results_folder]:
-                            os.makedirs(f"{folder}\{fits_str}", exist_ok=True)
+                            os.makedirs(rf"{folder}\{fits_str}", exist_ok=True)
                             plt.savefig(
                                 rf"{folder}\{fits_str}\{fn_id} ({fits_str}).png",
                                 dpi=300,
@@ -517,9 +507,10 @@ for PW in [True]:
             # Save parameter data as xlsx
             df_fitted_params = pd.DataFrame(rows)
             N_xi_fitted_parameters_fn = (
-                rf"{results_folder}\N_xi Fitted Parameters (rho={rho}, PW={PW_str})"
+                rf"{results_folder}\N_xi Fitted Parameters (rho={rho}, PW={pw})"
             )
             df_fitted_params.to_excel(rf"{N_xi_fitted_parameters_fn}.xlsx", index=False)
 
         print("Done!")
+
 
