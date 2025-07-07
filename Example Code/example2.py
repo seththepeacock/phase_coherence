@@ -17,17 +17,17 @@ tau = 0.05
 xi = tau # For this example, tau and xi are the same (C_tau)
 
 # Get STFT
-f, stft = get_stft(wf, sr, tau=tau, seg_spacing=xi)
+f, get_stft = get_stft(wf, sr, tau=tau, seg_spacing=xi)
 
 # Get coherence, passing in STFT
-f, C_tau = get_coherence(wf, sr, tau=tau, xi=xi, ref_type="next_seg", reuse_stft=(f, stft))
+f, C_tau = get_coherence(wf, sr, tau=tau, xi=xi, ref_type="next_seg", reuse_stft=(f, get_stft))
 
 # Now let's get the magnitude spectrum - still reusing the STFT from before!
-f, mag_spec = get_welch(wf, sr, tau=tau, seg_spacing=xi, scaling='mags', reuse_stft=(f, stft)) 
+f, mag_spec = welch(wf, sr, tau=tau, seg_spacing=xi, scaling='mags', reuse_stft=(f, get_stft)) 
 
 # And C_theta; note ref_type can be "next_freq" or "both_freqs" for referencing to either side - I think Chris' code does the latter so we'll use that
 # Either way, frequency axis is slightly modified so we'll redefine f (both_freqs loses the first and last bin)
-f_theta, C_theta = get_coherence(wf, sr, tau=tau, xi=xi, ref_type="both_freqs", reuse_stft=(f, stft))
+f_theta, C_theta = get_coherence(wf, sr, tau=tau, xi=xi, ref_type="both_freqs", reuse_stft=(f, get_stft))
 
 # Now let's get a C_xi; we can't reuse the STFT since we're changing xi, but that's okay (the F in FFT is there for a reason!)
 xi2 = 0.0025
@@ -55,7 +55,7 @@ plt.show()
 # With "return_dict" set to True, we get back a dictionary:
 tau = 0.05
 xi = 0.0025
-coherence_dict = get_coherence(wf, sr, tau=tau, xi=xi, ref_type="next_seg", reuse_stft=(f, stft), return_dict=True)
+coherence_dict = get_coherence(wf, sr, tau=tau, xi=xi, ref_type="next_seg", reuse_stft=(f, get_stft), return_dict=True)
 
 # which we of course can get the freq axis and coherence from:
 f = coherence_dict["freq_ax"]

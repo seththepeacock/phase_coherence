@@ -6,6 +6,90 @@ from scipy.signal import get_window
 HELPER FUNCTIONS
 """
 
+def spectral_filter(wf, fs, cutoff_freq, type="hp"):
+    """Filters waveform by zeroing out frequencies above/below cutoff frequency
+
+    Parameters
+    ------------
+        wf: array
+          waveform input array
+        fs: int
+          sample rate of waveform
+        cutoff_freq: float
+          cutoff frequency for filtering
+        type: str, Optional
+          Either 'hp' for high-pass or 'lp' for low-pass
+    """
+    fft_coefficients = np.fft.rfft(wf)
+    frequencies = np.fft.rfftfreq(len(wf), d=1 / fs)
+
+    if type == "hp":
+        # Zero out coefficients from 0 Hz to cutoff_frequency Hz
+        fft_coefficients[frequencies <= cutoff_freq] = 0
+    elif type == "lp":
+        # Zero out coefficients from cutoff_frequency Hz to Nyquist frequency
+        fft_coefficients[frequencies >= cutoff_freq] = 0
+
+    # Compute the inverse real-valued FFT (irfft)
+    filtered_wf = np.fft.irfft(
+        fft_coefficients, n=len(wf)
+    )  # Ensure output length matches input
+
+    return filtered_wf
+
+def kaiser_filter(wf, cf, df, rip):
+    # IMPLEMENT
+    return wf
+
+def get_xis_array(xis, fs, hop):
+        """ Helper function to get a xis array from (possibly) a dictionary of values; returns xis and a boolean value saying whether or not delta_xi is constant
+        """
+
+        # Get xis array
+        consistent_delta_xi = True
+        if isinstance(xis, dict):
+            # Try to get parameters in samples
+            try:
+                xi_min = xis['xi_min']
+                xi_max = xis['xi_max']
+                delta_xi = xis['delta_xi']
+            except KeyError:
+                # if not there, try to get in seconds
+                try:
+                    xi_min = round(xis['xi_min_s'] * fs)
+                    xi_max = round(xis['xi_max_s'] * fs)
+                    delta_xi = round(xis['delta_xi_s'] * fs)
+                # If neither are there, raise an error
+                except KeyError:
+                    raise ValueError("You passed a dict to create the xis array, but it was missing one or more of the keys: 'xi_min', 'xi_max', 'delta_xi'!")
+
+            # Check values
+            if not all(isinstance(val, int) for val in [xi_min, xi_max, delta_xi]):
+                raise TypeError("All values for 'xi_min', 'xi_max', and 'delta_xi' must be int.")
+            if xi_min >= xi_max:
+                raise ValueError(f"'xi_min' must be less than 'xi_max'. Got xi_min={xi_min}, xi_max={xi_max}")
+            if delta_xi <= 0:
+                raise ValueError(f"'delta_xi' must be positive. Got delta_xi={delta_xi}")
+            
+            # Calculate xis
+            xis = np.arange(xi_min, xi_max+1, delta_xi)
+        elif not isinstance(xis, list) or not isinstance(xis, np.ndarray):
+            raise ValueError(f"xis={xis} must be a dictionary or an array!")
+        # Here, we know we just got array of xis; check if we'll be able to turbo boost (if each xi is an int num of segs away)
+        else: 
+            xi_min = xis[0]
+            xi_max = xis[-1]
+            delta_xi = xis[1] - xis[0]
+            # Make sure this delta_xi is actually interpretable as a consistent delta_xi
+            if np.any(np.abs(np.diff(xis) - delta_xi) > 1e-9):
+                consistent_delta_xi = False
+        if consistent_delta_xi and delta_xi == xi_min and xi_min == hop:
+          print(
+              f"delta_xi = xi_min = hop (= {hop}), so all xis will be an integer number of segs away, so we can turbo-boost the coherences with a single stft! NICE"
+          )
+
+        return xis
+
 
 def get_avg_vector(phase_diffs):
     """Returns magnitude, phase of vector made by averaging over unit vectors with angles given by input phases
@@ -23,53 +107,6 @@ def get_avg_vector(phase_diffs):
     # finally, output the averaged vector's vector strength and angle with x axis (each a 1D array along the frequency axis)
     return vec_strength, np.angle(avg_vector)
 
-def get_phaseco_win(dyn_win, tau, xi, static_win=None, ref_type="next_seg"):
-        if dyn_win is not None:
-            if ref_type != "next_seg":
-                raise ValueError(
-                    f"You passed in a dynamic windowing method but you're using a {ref_type} reference; these were designed for next_seg!"
-                )
-            if static_win is not None:
-                raise ValueError(
-                    "You passed in a dynamic windowing method and a static window; which do we use???"
-                )
-            # Unpack dyn_win
-            match dyn_win[0]:
-                case "rho":
-                    rho, snapping_rhortle = dyn_win[1], dyn_win[2]
-                    if snapping_rhortle and xi > tau:
-                        win = None
-                    else:
-                        desired_fwhm = rho * xi
-                        sigma = desired_fwhm / (2 * np.sqrt(2 * np.log(2)))
-                        win = get_window(("gaussian", sigma), tau)
-                case "eta":
-                    eta, win_type = dyn_win[1], dyn_win[2]
-                    tau = get_tau_from_eta(tau, xi, eta, win_type)
-                    raise ValueError("Haven't implemented eta dynamic windowing yet!")
-                    
-                case _:
-                    raise ValueError(
-                        "Dynamic windowing method must be either 'rho' or 'eta'!"
-                    )
-        elif static_win is not None:
-            # Here we just use the static window since dyn_win was None
-            if isinstance(static_win, str) or (
-                isinstance(static_win, tuple) and isinstance(static_win[0], str)
-            ):
-                # Get window function (boxcar is no window)
-                win = get_window(static_win, tau)
-            else:  # Here we assume static_win was just an array of window coefficients
-                win = static_win
-                if len(win) != tau:
-                    raise Exception(
-                        f"Your window must be the same length as tau (={tau})!"
-                    )
-        else:
-            # Neither was passed, so we just set win to None and get_stft will use a boxcar
-            win = None
-
-        return win, tau # Note that unless explicitly changed via eta windowing, tau just passes through
 
 def get_tau_from_eta(tau, xi, eta, win_type):
     """Returns the minimum tau such that the expected coherence for white noise for this window is less than eta

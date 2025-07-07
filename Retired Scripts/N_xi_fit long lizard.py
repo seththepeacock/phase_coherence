@@ -155,7 +155,7 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                 else:
                     # continue
                     print(f"Calculating coherences for {fn_id}")
-                    coherences_dict = get_colossogram_coherences(wf, fs, min_xi, max_xi, delta_xi, tauS=tauS, rho=rho, const_N_pd=const_N_pd, snapping_rhortle=snapping_rhortle, dense_stft=dense_stft, global_max_xi=global_max_xi, skip_min_xi=skip_min_xi, return_dict=True)
+                    coherences_dict = colossogram_coherences(wf, fs, min_xi, max_xi, delta_xi, tauS=tauS, rho=rho, const_N_pd=const_N_pd, snapping_rhortle=snapping_rhortle, dense_stft=dense_stft, global_max_xi=global_max_xi, skip_min_xi=skip_min_xi, return_dict=True)
                     coherences = coherences_dict['coherences']
                     f = coherences_dict['f']
                     xis = coherences_dict['xis']    
@@ -212,7 +212,7 @@ for end_decay_at in ['Next Min', 'Noise Floor']:
                     target_xi = 0.01
                     xi_idx = np.argmin(np.abs(xis - target_xi))
                     coherence_slice = coherences[:, xi_idx]
-                    psd = get_welch(wf=wf, fs=fs, tauS=tauS)[1]
+                    psd = welch(wf=wf, fs=fs, tauS=tauS)[1]
                     plt.close('all')
                     plt.figure(figsize=(11, 8))
                     plt.suptitle(suptitle)

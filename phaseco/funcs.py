@@ -1,23 +1,22 @@
 import numpy as np
-from .helper_funcs import *
-from scipy.signal import get_window, ShortTimeFFT
+from phaseco.helper_funcs import *
+from scipy.signal import get_window
 from scipy.fft import rfft, rfftfreq, fftshift
-import pywt
-import warnings
 from tqdm import tqdm
+import phaseco as pc
 
 
 """
-PRIMARY FUNCTIONS
+PRIMARY USER-FACING FUNCTIONS
 """
 
 
 def get_stft(
     wf,
     fs,
-    tau=None,
-    hop=None,
+    tau,
     nfft=None,
+    hop=None,
     win=None,
     N_segs=None,
     fftshift_segs=False,
@@ -28,44 +27,56 @@ def get_stft(
     Parameters
     ------------
         wf: array
-          waveform input array
+            waveform input array
         fs: int
-          sample rate of waveform
+            sample rate of waveform
         tau: float
-          length (in time) of each window
-        hop: float
-          length (in time) between the start of successive segments
-        rho: double, Optional
-          Applies a Gaussian window with whose FWHM is rho*xi
-        win_type: String, Optional
-          Window to apply before the FFT
-        N_segs: int, Optional
-          If this isn't passed, then just get the maximum number of segments of the given size
-        cutoff_freq: double, Optional
-          HPFs the total waveform by zeroing out frequencies above this frequency
-        fftshift_segs: bool, Optional
-          Shifts each time-domain window of the fft with fftshift() to center your window in time and make it zero-phase (no effect on coherence)
-        return_dict: bool, Optional
-          Returns a dict with:
-          d["f"] = f
-          d["stft"] = stft
-          d["segmented_wf"] = segmented_wf
-          d["seg_start_indices"] = seg_start_indices
+            length (in samples) of each segment
+        nfft: int, optional
+            length (in samples) of FFT; if nfft != tau, segments are zero padded to make up the difference
+        hop: float, optional
+            length (in samples) between the start of successive segments (defaults to tau //2, 50% overlap)
+        win: str or array, optional
+            Window to apply before the FFT, either array of coefficents (length tau) or string for SciPy get_window()
+        N_segs: int, optional
+            Limits number of segments to extract from waveform
+        fftshift_segs: bool, optional
+            Shifts each time-domain window of the fft with fftshift() to center your window in time and make it zero-phase (has no effect on coherence)
+        return_dict: bool, optional
+            Returns a dict with keys 'f', 'stft', 'seg_start_indices', 'segmented_wf', 'hop', 'fs', 'tau', 'hop', 'win', 'fs'
+    Returns
+    -------
+    f : numpy.ndarray
+        Frequency axis.
+    stft : numpy.ndarray
+        Short-time Fourier transform with dimensions (segments, frequency bins).
     """
 
     # Handle defaults
+    if hop is None:
+        hop = tau // 2
     if nfft is None:
         nfft = tau
 
+    if tau > len(wf):
+        raise ValueError(f"tau={tau} > len(wf)={len(wf)}; choose a smaller tau!")
+
+    # Check validity of parameters
+    if nfft < tau:
+        raise ValueError(f"nfft={nfft} < tau={tau}, should be >=")
+
+    
+    # Calculate the seg_start_indices
+
     # First, get the last index of the waveform
-    final_wf_index = len(wf) - 1
+    final_wf_idx = len(wf) - 1
 
     # next, we get what we would be the largest potential seg_start_index
-    latest_potential_seg_start_index = final_wf_index - (
+    last_potential_seg_start_idx = final_wf_idx - (
         tau - 1
     )  # start at the final_wf_index. we need to collect tau points. this final index is our first one, and then we need tau - 1 more.
-    seg_start_indices = np.arange(0, latest_potential_seg_start_index + 1, hop)
-    # the + 1 here is because np.arange won't ever include the "stop" argument in the output array... but it could include (stop - 1) which is just our final_seg_start_index!
+    seg_start_indices = np.arange(0, last_potential_seg_start_idx + 1, hop)
+    # + 1 is because highest index np.arange includes is (stop - 1), and we want it to include up to last_potential_seg_start_idx
 
     # if number of segments is passed in, we make sure it's less than the length of seg_start_indices
     if N_segs is not None:
@@ -86,17 +97,17 @@ def get_stft(
     if win is None:
         do_windowing = False
     else:
-        # in normal get_coherence usage, win will just be an array of window coefficients; 
+        # in normal get_coherence usage, win will just be an array of window coefficients;
         # this logic allows for passing in a string to get the window via SciPy get_window
-        if isinstance(win, str) or (
-                isinstance(win, tuple) and isinstance(win[0], str)
-            ):
-                # Get window function
-                win = get_window(win, tau)
+        if isinstance(win, str) or (isinstance(win, tuple) and isinstance(win[0], str)):
+            # Get window function
+            win = get_window(win, tau)
         # Set do_windowing = True unless it's just a boxcar (all 1s)
         do_windowing = np.any(win != 1)
 
     # Get segmented waveform matrix
+
+    # Detect if we need to zero pad or not
     zpad = True if nfft != tau else False
 
     segmented_wf = np.empty((N_segs, nfft))
@@ -130,7 +141,7 @@ def get_stft(
     N_bins = len(f)
     stft = np.empty((N_segs, N_bins), dtype=complex)
 
-    #IMPLEMENT rfft with different nfft instead of zpadding since probably more efficient1
+    # IMPLEMENT rfft with different nfft instead of zpadding since probably more efficient1
     # get ffts
     for k in range(N_segs):
         stft[k, :] = rfft(segmented_wf[k, :])
@@ -157,65 +168,61 @@ def get_stft(
 def get_coherence(
     wf,
     fs,
-    xi=None,
-    tau=None,
+    xi,
+    pw, 
+    tau,
     nfft=None,
     hop=None,
-    dyn_win=("rho", 0.7, False),
-    static_win=None,
-    pw=None,
+    win_meth={"method": "rho", "rho": 0.7},
     N_pd=None,
     ref_type="next_seg",
     freq_bin_hop=1,
-    return_avg_abs_phase_diffs=False,
+    return_avg_abs_pd=False,
     return_dict=False,
 ):
-    """Gets the phase coherence of the given waveform with the given window size
+    """Gets the phase coherence of the waveform against a copy of the waveform advanced xi samples
 
     Parameters
     ------------
         wf: array
-          waveform input array
-        fs:
-          sample rate of waveform
-        tau: float
-          length (in samples) of each segment
-        hop: float
-          length (in samples) between the start of successive segments
-        xi: float
-          length (in samples) between phase references
-        win_type: String, Optional
-          Window to apply before the FFT
-        N_segs: int, Optional
-          If this isn't passed, then just get the maximum number of segments of the given size
-        reuse_stft: tuple, Optional
-          If you want to avoid recalculating the STFT, pass it in here as a dictionary
-        ref_type: str, Optional
-          Either "next_seg" to ref phase against next window or "next_freq" for next frequency bin or "both_freqs" to compare freq bin on either side
-        cutoff_freq: double, Optional
-          HPFs the total waveform by zeroing out frequencies above this frequency
-        freq_bin_hop: int, Optional
-          How many bins over to reference phase against for next_freq
-        return_dict: bool, Optional
-          Defaults to only returning the coherence; if this is enabled, then a dictionary is returned with keys:
-          d["f"] = f
-          d["coherence"] = coherence
-          d["phases"] = phases
-          d["phase_diffs"] = phase_diffs
-          d["<|phase_diffs|>"] = avg_abs_phase_diffs
-          d["avg_pd"] = avg_pd
-          d["N_segs"] = N_segs
-          d["stft"] = stft
+            waveform input array
+        fs: float
+            sample rate of waveform
+        xi: int
+            length (in samples) to advance copy of signal for phase reference
+        pw: bool
+            weights the vector strength average by the magnitude of each segment * magnitude of xi advanced segment
+        tau: int
+            length (in samples) of each segment, used in get_stft()
+        nfft: int
+            length of fft, does zero padding if nfft > tau, used in get_stft()
+        hop: int
+            length between the start of successive segments, used in get_stft()
+        win_meth: dict, optional
+            windowing method dictionary; see get_pc_win() for details
+        N_pd: int, optional
+            number of phase differences in vector strength, converted to N_segs for get_stft()
+        ref_type: str, optional
+            Either "next_seg" to ref phase against next window or "next_freq" for next frequency bin or "both_freqs" to compare freq bin on either side
+        freq_bin_hop: int, optional
+            How many bins over to reference phase against for next_freq
+        return_avg_abs_pd: bool, optional
+            Calculates <|phase diffs|> and adds to output dictionary
+        return_dict: bool, optional
+            Defaults to only returning (f, coherence); if this is enabled, then a dictionary is returned with keys:
+          'coherence', 'phase_diffs', 'avg_pd', 'N_pd', 'N_segs', 'f', 'stft', 'tau', 'hop', 'xi', 'fs', 'pw', 'avg_abs_pd'
     """
 
     # Handle defaults
     if hop is None:
         hop = tau  # Zero overlap (at least, outside of xi referencing considerations)
     if nfft is None:
-        nfft = tau # No zero padding (at least, outside of eta windowing considerations)
-    
+        nfft = (
+            tau  # No zero padding (at least, outside of eta windowing considerations)
+        )
+
     # Get window (and possibly redfine tau if doing eta windowing)
-    win, tau = get_phaseco_win(dyn_win, tau, xi, nfft, static_win, ref_type)
+    win, tau = get_win_pc(win_meth, tau, xi, ref_type)
 
     # we can reference each phase against the phase of the same frequency in the next window:
     if ref_type == "next_seg":
@@ -255,11 +262,9 @@ def get_coherence(
         else:
             # In this case, xi is not an integer number of hops away, so we need two stfts each with N_pd segments
             f, stft_undelayed = get_stft(
-                wf[0:-xi], fs, tau, hop, xi, nfft, win, N_segs=N_pd
+                wf=wf[0:-xi], fs=fs, tau=tau, hop=hop, nfft=nfft, win=win, N_segs=N_pd
             )
-            stft_delayed = get_stft(wf[xi:], fs, tau, hop, xi, nfft, win, N_segs=N_pd)[
-                1
-            ]
+            stft_delayed = get_stft(wf=wf[xi:], fs=fs, tau=tau, hop=hop, nfft=nfft, win=win, N_segs=N_pd)[1]
             N_bins = len(f)
             # First, do the pw case
             if pw:
@@ -347,7 +352,6 @@ def get_coherence(
     else:  # Return full dictionary
         d = {
             "coherence": coherence,
-            "phases": phases,
             "phase_diffs": phase_diffs,
             "avg_pd": avg_pd,
             "N_pd": N_pd,
@@ -360,44 +364,168 @@ def get_coherence(
             "fs": fs,
             "pw": pw,
         }
-        if return_avg_abs_phase_diffs:
+        if return_avg_abs_pd:
             phase_diffs = (phase_diffs + np.pi) % (2 * np.pi) - np.pi
-            print("CHECK THIS <|phase diffs|> IMPLEMENTATION WORKS AS EXPECTED")
+            print("CHECK THIS NEW <|phase diffs|> IMPLEMENTATION WORKS AS EXPECTED")
             # get <|phase diffs|> (note we're taking mean w.r.t. PD axis 0, not frequency axis)
-            d["avg_abs_phase_diffs"] = np.mean(np.abs(phase_diffs), 0)
+            d["avg_abs_pd"] = np.mean(np.abs(phase_diffs), 0)
         return d
 
 
-def get_colossogram_coherences(
+def get_win_pc(win_meth, tau, xi, ref_type="next_seg"):
+    """
+    Gets the window based on the dynamic (or static) windowing method.
+
+    Parameters
+    ----------
+    win_meth : dict
+        Dictionary specifying windowing method parameters. Keys include:
+
+        - 'method' (str): Specifies the windowing method to use. Options are:
+
+            - `'static'`: Use a static window of type `'win_type'`, which should be a string or tuple
+              compatible with SciPy's `get_window()`.
+              Required keys: `'win_type'`
+
+            - `'rho'`: Use a Gaussian window whose full width at half maximum (FWHM) is `rho * xi`.
+              Required keys: `'rho'`, `'snapping_rhortle'`
+
+            - `'eta'`: Use a window of type `'win_type'` with a shortened duration `tau`, such that
+              the expected coherence for white noise is ≤ `eta`. Zero-padding is applied up to `tau`
+              to maintain the number of frequency bins.
+              Required keys: `'eta'`, `'win_type'`
+
+        - 'rho' (float, optional): Controls the FWHM of the Gaussian window when `'method' == 'rho'`.
+
+        - 'eta' (float, optional): Maximum allowable spurious coherence due to overlap in the white noise case
+          (used when `'method' == 'eta'`).
+
+        - 'win_type' (str or tuple, optional): Window type to be passed to `scipy.signal.get_window()`
+          (used in `'static'` and `'eta'` methods).
+
+        - 'snapping_rhortle' (bool, optional): When `True` and `'method' == 'rho'`, switches from a Gaussian
+          window to a fixed boxcar for all `xi > tau`. Defaults to `False`.
+
+    tau : int
+        Length (in samples) of each segment, used in `get_stft()`.
+    xi : int
+        Length (in samples) to advance copy of signal for phase reference.
+    ref_type : str
+        Type of reference segment. Must be `'next_seg'` when using a dynamic windowing method,
+        since that's what the methods were designed for.
+    """
+
+    if "method" not in win_meth.keys():
+        return ValueError(
+            "the 'win_meth' dictionary must contain a 'method' key! See get_win_pc() documentation for details."
+        )
+    method = win_meth["method"]
+
+    # First, handle dynamic windows
+    if method in ["rho", "eta"]:
+        # Make sure our ref_type is appropriate
+        if ref_type != "next_seg":
+            raise ValueError(
+                f"You passed in a dynamic windowing method ({method} windowing) but you're using a {ref_type} reference; this was designed for next_seg!"
+            )
+
+        if method == "rho":
+            rho = win_meth["rho"]
+            snapping_rhortle = (
+                win_meth["snapping_rhortle"]
+                if "snapping_rhortle" in win_meth.keys()
+                else False
+            )
+            if snapping_rhortle and xi > tau:
+                win = None
+            else:
+                desired_fwhm = rho * xi
+                sigma = desired_fwhm / (2 * np.sqrt(2 * np.log(2)))
+                win = get_window(("gaussian", sigma), tau)
+
+        else:
+            # here, method == 'eta'
+            raise RuntimeError("Haven't implemented eta dynamic windowing yet!")
+            eta = win_meth["eta"]
+            win_type = win_meth["win_type"]
+            tau = get_tau_from_eta(tau, xi, eta, win_type)
+
+    elif method == "static":
+        win_type = win_meth["win_type"]
+        win = get_window(win_type, tau)
+    else:
+        raise ValueError(
+            f"method={method} is not a valid windowing method; see get_win_pc() documentation for details."
+        )
+
+    return (
+        win,
+        tau,
+    )  # Note that unless explicitly changed via eta windowing, tau just passes through
+
+
+def colossogram_coherences(
     wf,
     fs,
+    xis,
+    pw,
     tau,
-    xi_min,
-    xi_max,
-    delta_xi=None,
+    nfft=None,
     hop=None,
-    dyn_win=("rho", 0.7, False),
-    pw=None,
-    const_N_pd=1,
+    win_meth={"method": "rho", "rho": 0.7},
+    const_N_pd=True,
     global_xi_max_s=None,
+    ref_type="next_seg",
     return_dict=False,
 ):
+    """Gets the phase coherence of the waveform against a copy of the waveform advanced xi samples
+
+    Parameters
+    ------------
+        wf: array
+            waveform input array
+        fs: float
+            sample rate of waveform
+        xis: array or dictionary
+            array of xi to calculate the coherence for, the phase reference distances (in samples);
+
+            alternatively, a dictionary with keys `'xi_min'`, `'xi_max'`, `'delta_xi'` which creates this xis array
+        pw: bool
+            weights the vector strength average by the magnitude of each segment * magnitude of xi advanced segment
+        tau: int
+            length (in samples) of each segment, used in get_stft()
+        nfft: int
+            length of fft; implements zero padding if nfft > tau, used in get_stft() (defaults to tau AKA no zero padding)
+        hop: int
+            length between the start of successive segments, used in get_stft(); defaults to tau // 2
+        win_meth: dict, optional
+            windowing method dictionary; see get_pc_win() for details
+        const_N_pd: bool, optional
+            holds the number of phase differences fixed at the minimum N_pd able to be calculated across all xi (e.g. it's set by the maximum xi in the xis array)
+        global_xi_max: int, optional
+            instead of the N_pd being set by the maximum xi in this xi array, it's set by this value (e.g. if you're comparing across species with different xi_max)
+        ref_type: str, optional
+            Either "next_seg" to ref phase against next window or "next_freq" for next frequency bin or "both_freqs" to compare freq bin on either side
+        return_dict: bool, optional
+            Defaults to only returning (xis_s, f, coherence); but if this is enabled, then a dictionary is returned with keys:
+            'xis', 'xis_s', 'f', 'coherences', 'tau', 'fs', 'N_pd_min', 'N_pd_max', 'hop', 'win_meth', 'global_xi_max'
+    """
+    
+
+
 
     # Handle defaults
     if hop is None:
-        hop = xi_min
-    if delta_xi is None:
-        delta_xi = xi_min
-    # Note that these defaults allow us to only calculate a single stft in get_coherence since each xi will be an integer number of steps away!
-    if delta_xi == xi_min and xi_min == hop:
-        print(
-            f"delta_xi = xi_min = hop (= {hop}), so all xis will be an integer number of segs away, so we can turbo-boost the coherences with a single stft!"
-        )
+        hop = tau // 2
+    # Get xis array (function is to handle possible passing in of dict with keys 'xi_min', 'xi_max', and 'delta_xi')
+    xis = get_xis_array(xis, fs, hop)
+    xi_min = xis[0]
+    xi_max = xis[-1] 
+    # ...also prints if we can turbo boost all the coherence calculations by only calculating a single STFT since xi is always an integer number of segs away
 
-    # Calculate xi array and N_bins
-    num_xis = int((xi_max - xi_min) / delta_xi) + 1
-    xis = np.linspace(xi_min, xi_max, num_xis)
-    f = np.array(rfftfreq(tau * fs, 1 / fs))
+
+    # Get frequency array
+    f = np.array(rfftfreq(tau, 1 / fs))
     N_bins = len(f)
     # Initialize coherences array
     coherences = np.zeros((N_bins, len(xis)))
@@ -414,7 +542,7 @@ def get_colossogram_coherences(
     else:
         global_xi_max = (
             global_xi_max_s * fs
-        )  # Note we wanted to pass in global_xi_max in secs so it can be consistent across samplerates
+        )  # Note we deliberately passed in global_xi_max in secs so it can be consistent across samplerates
 
     # Get the number of phase diffs (we can do this outside xi loop since it's constant)
     eff_len_max = len(wf) - xi_min
@@ -438,8 +566,18 @@ def get_colossogram_coherences(
             eff_len = len(wf) - xi
             N_pd = int((eff_len - tau) / hop) + 1
 
+        print(xi)
         coherences[:, i] = get_coherence(
-            wf=wf, fs=fs, tau=tau, xi=xi, hop=hop, dyn_win=dyn_win, N_pd=N_pd, pw=pw
+            wf=wf,
+            fs=fs,
+            tau=tau,
+            pw=pw,
+            xi=xi,
+            nfft=nfft,
+            hop=hop,
+            win_meth=win_meth,
+            N_pd=N_pd,
+            ref_type=ref_type,
         )[1]
 
     # Convert to xis_s
@@ -456,77 +594,21 @@ def get_colossogram_coherences(
             "N_pd_min": N_pd_min,
             "N_pd_max": N_pd_max,
             "hop": hop,
-            "dyn_win": dyn_win,
+            "win_meth": win_meth,
             "global_xi_max": global_xi_max,
         }
     else:
         return xis_s, f, coherences
 
 
-def get_asym_coherence(wf, fs, tau, xi, fwhm=None, rho=None, N_segs=None):
-    """Gets the coherence using an asymmetric window (likely will eventually be assimilated as an option in get_coherence())
-    Parameters
-    ------------
-        wf: array
-          waveform input array
-        fs: int
-          sampling rate of waveform
-        tau: int
-          length (in samples) of each window
-        xi: float
-          amount (in time) between the start points of adjacent segments
-        fwhm: double, Optional
-          FWHM of the Gaussian window (in seconds), need either this or rho
-        rho: double, Optional
-          Applies a Gaussian window whose FWHM is rho*xi, need either this or fwhm
-    """
-
-    # Get SIGMA for the gaussian part of the window either via rho (dynamic FWHM = rho*xi) or fixed FWHM
-    if fwhm is None and rho is None:
-        raise ValueError("You must input either FWHM or rho!")
-    elif fwhm is not None:
-        SIGMA = get_sigma(fwhm=fwhm, fs=fs)
-    elif rho is not None:
-        SIGMA = get_sigma(fwhm=rho * xi, fs=fs)
-
-    # Generate gaussian
-    gaussian = get_window(("gauss", SIGMA), tau)
-    left_window = np.ones(int(tau))
-    right_window = np.ones(int(tau))
-    left_window[int(tau / 2) :] = gaussian[
-        int(tau / 2) :
-    ]  # Left window starts with ones and ends with gaussian (gaussian on overlapping side)
-    right_window[0 : int(tau / 2)] = gaussian[0 : int(tau / 2)]  # Vice versa
-
-    # Get STFTs for each side
-    f, left_stft = get_stft(
-        wf=wf, fs=fs, tau=tau, hop=xi, N_segs=N_segs, win=left_window
-    )
-    f, right_stft = get_stft(
-        wf=wf, fs=fs, tau=tau, hop=xi, N_segs=N_segs, win=right_window
-    )
-    # Extract angles
-    left_phases = np.angle(left_stft)
-    right_phases = np.angle(right_stft)
-    # Calc phase diffs
-    N_bins = len(f)  # Number of frequency bins
-    phase_diffs = np.zeros((N_segs - 1, N_bins))
-    for win in range(N_segs - 1):
-        # Take the difference between the phases, with the windows aligned as to minimize shared samples
-        phase_diffs[win] = right_phases[win + 1] - left_phases[win]
-
-    coherence, avg_pd = get_avg_vector(phase_diffs)  # Get vector strength
-
-    return f, coherence
-
-
-def get_welch(
+def welch(
     wf,
     fs,
-    tau=None,
+    tau,
+    nfft=None,
     hop=None,
     N_segs=None,
-    win_type="boxcar",
+    win=None,
     scaling="density",
     reuse_stft=None,
     return_dict=False,
@@ -536,41 +618,37 @@ def get_welch(
     Parameters
     ------------
         wf: array
-          waveform input array
-        fs: int
-          sample rate of waveform
-        tau: float
-          length (in samples) of each window; used in get_stft and to calculate normalizing factor
-        win_type: String, Optional
-          Window to apply before the FFT
-        N_segs: int, Optional
-          Used in get_stft;
-            if this isn't passed, then just gets the maximum number of segments of the given size
-        scaling: String, Optional
-          "mags" (magnitudes) or "density" (PSD) or "spectrum" (power spectrum)
-        reuse_stft: tuple, Optional
-          If you want to avoid recalculating the segmented fft, pass it in here along with the frequency axis as (f, stft)
-        return_dict: bool, Optional
-          Returns a dict with:
-          d["f"] = f
-          d["spectrum"] = spectrum
-          d["segmented_spectrum"] = segmented_spectrum
+            waveform input array
+        fs: float
+            sample rate of waveform
+        tau: int
+            length (in samples) of each window; used in stft() and to calculate normalizing factor
+        hop: int
+            length between the start of successive segments, used in get_stft()
+        N_segs: int, optional
+            Used in stft()
+        win: str or tuple or array
+            Window to apply to each segment before FFT, either str or tuple for SciPy get_window() or an array (length tau) of window coefficents
+        scaling : str, optional
+            Type of spectral scaling to apply. Options are:
+            - 'density': Power Spectral Density (default)
+            - 'spectrum': Power spectrum without normalization
+        reuse_stft: tuple, optional
+            Pass in the stft dictionary here to avoid recalculation
+        return_dict: bool, optional
+            Returns a dict with:
+            d["f"] = f
+            d["spectrum"] = spectrum
+            d["segmented_spectrum"] = segmented_spectrum
     """
+    # Handle 
+    
     # if nothing was passed into reuse_stft then we need to recalculate it
-    if reuse_stft is None:
-        f, stft = get_stft(
-            wf=wf,
-            fs=fs,
-            tau=tau,
-            hop=hop,
-            N_segs=N_segs,
-            win=win_type,
-        )
-    else:
-        f, stft = reuse_stft
-        # Make sure these are valid
-        if stft.shape[1] != f.shape[0]:
-            raise Exception("STFT and frequency axis don't match!")
+    stft_dict = reuse_stft if reuse_stft is not None else get_stft(wf=wf, fs=fs, tau=tau, nfft=nfft, hop=hop, N_segs=N_segs, win=win, return_dict=True)
+
+    f = stft_dict["f"]
+    stft = stft_dict["stft"]
+    win = stft_dict["win"]
 
     # calculate necessary params from the stft
     N_segs, N_bins = np.shape(stft)
@@ -579,141 +657,37 @@ def get_welch(
     segmented_spectrum = np.zeros((N_segs, N_bins))
 
     # get spectrum for each window
-    for win in range(N_segs):
-        segmented_spectrum[win, :] = (np.abs(stft[win, :])) ** 2
+    for seg in range(N_segs):
+        segmented_spectrum[seg, :] = (np.abs(stft[seg, :])) ** 2
 
     # average over all segments (in power)
     spectrum = np.mean(segmented_spectrum, 0)
 
-    window = get_window(win_type, tau)
-    S1 = np.sum(window)
-    S2 = np.sum(window**2)
-    ENBW = tau * S2 / S1**2  # In samples
-    U = S2 / tau
+    S1 = np.sum(win)
+    S2 = np.sum(win**2)
     if scaling == "mags":
         spectrum = np.sqrt(spectrum)
-        normalizing_factor = 1 / S1
+        scaling_factor = 1 / S1
 
     elif scaling == "spectrum":
-        normalizing_factor = 1 / S1**2
+        # Note that this is the density scaling except multiplied by the bin width * ENBW (in # bins)
+        scaling_factor = 1 / S1**2
 
     elif scaling == "density":
-        # Start with standard periodogram/spectrum scaling, then divide by bin width (times ENBW in samples)
-        bin_width = 1 / tau
-        bin_width = fs / tau
-        normalizing_factor = 1 / S1**2
-        normalizing_factor = normalizing_factor / (ENBW * bin_width)
+        scaling_factor = 1 / (fs * S2)
 
     else:
         raise Exception("Scaling must be 'mags', 'density', or 'spectrum'!")
 
     # Normalize; since this is an rfft, we should multiply by 2
-    spectrum = spectrum * 2 * normalizing_factor
+    spectrum = spectrum * 2 * scaling_factor
     # Except DC bin should NOT be scaled by 2
     spectrum[0] = spectrum[0] / 2
     # Nyquist bin shouldn't either (note this bin only exists if tau is even)
     if tau % 2 == 0:
         spectrum[-1] = spectrum[-1] / 2
 
-    if not return_dict:
-        return f, spectrum
-    else:
+    if return_dict:
         return {"f": f, "spectrum": spectrum, "segmented_spectrum": segmented_spectrum}
-
-
-def get_cwt(wf, fs, fb, f):
-    """Returns the CWT coefficients of the given waveform with a complex morelet wavelet
-    Parameters
-    ------------
-        wf: array
-            waveform input array
-        fs: int
-            sampling rate of waveform
-        fb: float
-            bandwidth of wavelet in time; bigger bandwidth = better frequency resolution but less time resolution (similar to tau)
-        f: array
-            frequency axis
-    """
-    # Perform a Continuous Wavelet Transform (CWT)
-    dt = 1 / fs
-    # Define wavelet and get its center frequency (for scale-frequency conversion)
-    wavelet_string = f"cmor{fb}-1.0"
-    wavelet = pywt.ContinuousWavelet(wavelet_string)
-    fc = pywt.central_frequency(
-        wavelet
-    )  # This will always be 1.0 because we set it that way
-    # Convert frequencies to scales
-    scales = fc / (f * dt)
-    coefficients, f_cwt = pywt.cwt(
-        wf, scales, wavelet, method="fft", sampling_period=dt
-    )
-    return coefficients.T
-
-
-def get_wavelet_coherence(wf, fs, f, fb=1.0, cwt=None, xi_s=0.0025):
-    """Returns the wavelet coherence of the given waveform with a complex morelet wavelet
-    Parameters
-    ------------
-        wf: array
-            waveform input array
-        fs: int
-            sampling rate of waveform
-        f: array
-            frequency axis
-        fb: float, Optional
-            bandwidth of wavelet in time; bigger bandwidth = better frequency resolution but less time resolution (similar to tau)
-        cwt: array, Optional
-            CWT coefficients of waveform if already calculated
-        xi: float, Optional
-            length (in time) between the start of successive segments
-    """
-    if cwt is None:
-        cwt = get_cwt(wf=wf, fs=fs, fb=fb, f=f)
-    # get phases
-    phases = np.angle(cwt)
-    xi = round(xi_s * fs)
-
-    N_segs = int(len(wf) / xi) - 1
-
-    # initialize array for phase diffs
-    phase_diffs = np.zeros((N_segs, len(f)))
-
-    # calc phase diffs
-    for seg in range(N_segs):
-        phase_diffs[seg, :] = phases[int(seg * xi)] - phases[int((seg + 1) * xi)]
-
-    wav_coherence, _ = get_avg_vector(phase_diffs)
-
-    return wav_coherence
-
-
-def spectral_filter(wf, fs, cutoff_freq, type="hp"):
-    """Filters waveform by zeroing out frequencies above/below cutoff frequency
-
-    Parameters
-    ------------
-        wf: array
-          waveform input array
-        fs: int
-          sample rate of waveform
-        cutoff_freq: float
-          cutoff frequency for filtering
-        type: str, Optional
-          Either 'hp' for high-pass or 'lp' for low-pass
-    """
-    fft_coefficients = np.fft.rfft(wf)
-    frequencies = np.fft.rfftfreq(len(wf), d=1 / fs)
-
-    if type == "hp":
-        # Zero out coefficients from 0 Hz to cutoff_frequency Hz
-        fft_coefficients[frequencies <= cutoff_freq] = 0
-    elif type == "lp":
-        # Zero out coefficients from cutoff_frequency Hz to Nyquist frequency
-        fft_coefficients[frequencies >= cutoff_freq] = 0
-
-    # Compute the inverse real-valued FFT (irfft)
-    filtered_wf = np.fft.irfft(
-        fft_coefficients, n=len(wf)
-    )  # Ensure output length matches input
-
-    return filtered_wf
+    else:
+        return f, spectrum

@@ -189,7 +189,7 @@ for rho in [0.7]:
                 if plot_what_we_got:
                     continue
                 print(f"Calculating coherences for {fn_id}")
-                coherences_dict = get_colossogram_coherences(
+                coherences_dict = colossogram_coherences(
                     wf,
                     fs,
                     min_xi,
@@ -292,7 +292,7 @@ for rho in [0.7]:
                 target_xi = 0.01
                 xi_idx = np.argmin(np.abs(xis - target_xi))
                 coherence_slice = coherences[:, xi_idx]
-                psd = get_welch(wf=wf, fs=fs, tauS=tauS)[1]
+                psd = welch(wf=wf, fs=fs, tauS=tauS)[1]
                 plt.close("all")
                 plt.figure(figsize=(11, 8))
                 plt.suptitle(suptitle)

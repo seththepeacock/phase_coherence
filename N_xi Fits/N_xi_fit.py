@@ -233,7 +233,7 @@ for pw in [True]:
                     plt.close("all")
                     plt.figure(figsize=(15, 5))
                     plot_colossogram(
-                        coherences, f, xis_s, tau_s, max_khz=max_khz, cmap="magma"
+                        xis_s, f, coherences, title=rf'Colossogram ($\tau={tau_s:.3f}$s)', max_khz=max_khz, cmap="magma"
                     )
                     for peak_idx in good_peak_idxs:
                         plt.scatter(
@@ -259,7 +259,7 @@ for pw in [True]:
                     target_xi = 0.01
                     xi_idx = np.argmin(np.abs(xis_s - target_xi))
                     coherence_slice = coherences[:, xi_idx]
-                    psd = get_welch(wf=wf, fs=fs, tau=tau)[1]
+                    psd = welch(wf=wf, fs=fs, tau=tau)[1]
                     plt.close("all")
                     plt.figure(figsize=(11, 8))
                     plt.suptitle(suptitle)

@@ -98,7 +98,7 @@ def load_calc_coherences(
             (coherences_dict) = pickle.load(file)
     else:
         # Calculate and dump coherences dict
-        coherences_dict = get_colossogram_coherences(
+        coherences_dict = colossogram_coherences(
             wf,
             fs,
             xi_min,

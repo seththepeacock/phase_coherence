@@ -38,7 +38,7 @@ for species in ['Tokay']:
         # Get peak bin indices
         fig_folder = r'N_xi Fits/Auto Peak Picks'
         fn_id = rf"{species} {wf_idx}, tau={tau*1000:.0f}ms, wf_length={wf_length}s"
-        f, psd = get_welch(wf=wf, fs=fs, tauS=tauS)
+        f, psd = welch(wf=wf, fs=fs, tauS=tauS)
         
         # Guesses
         match wf_fn:

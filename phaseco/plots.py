@@ -5,7 +5,7 @@ from .funcs import *
 
 
 "Colossogram Plot Function"
-def plot_colossogram(coherences, f, xis_s, tau_s=None, title=None, max_khz=None, cmap='magma'):
+def plot_colossogram(xis_s, f, coherences, title=None, max_khz=None, cmap='magma'):
     # make meshgrid
     xx, yy = np.meshgrid(xis_s * 1000, f / 1000) # Note we convert xis to ms and f to kHz
     
@@ -24,7 +24,7 @@ def plot_colossogram(coherences, f, xis_s, tau_s=None, title=None, max_khz=None,
     plt.xlabel(rf"$\xi$ [ms]")
     plt.ylabel("Frequency [kHz]")
     if title is None:
-        title = rf"Colossogram with $\tau={tau_s:.3f}s$" if tau_s else "Colossogram"
+        title = rf"Colossogram"
     plt.title(title)
 
 def coherence_vs_spectrum(wf, sr, tau_s, xi_s=None, bin_shift=1, num_segs=None, scaling='density', ref_type="next_win", win_type='boxcar', fftshift_segs=False, khz=False, db=True, downsample_freq=False, 
@@ -80,18 +80,18 @@ def coherence_vs_spectrum(wf, sr, tau_s, xi_s=None, bin_shift=1, num_segs=None, 
   if xi_s is None:
     xi_s = tau_s
   # get stft so we don't have to do it twice below
-  d = get_stft(wf=wf, sr=sr, tau=tau_s, seg_spacing=xi_s, num_segs=num_segs, win=win_type)
+  d = stft(wf=wf, sr=sr, tau=tau_s, seg_spacing=xi_s, num_segs=num_segs, win=win_type)
   stft = d["stft"]
   # we'll want to pass this through the subsequent functions as well to maintain correspondence through all the shifts
   freq_ax = d["freq_ax"]
   
   # get (averaged over segments) spectrum
-  p = get_welch(wf=wf, sr=sr, tau=tau_s, stft=stft, scaling=scaling, win_type=win_type, fftshift_segs=fftshift_segs, freq_ax=freq_ax, return_dict=True)
+  p = welch(wf=wf, sr=sr, tau=tau_s, stft=stft, scaling=scaling, win_type=win_type, fftshift_segs=fftshift_segs, freq_ax=freq_ax, return_dict=True)
   spectrum = p["spectrum"]
   spectrum_freq_ax = p["freq_ax"]
 
   # get coherence
-  c = get_coherence(wf=wf, sr=sr, tau=tau_s, stft=stft, ref_type=ref_type, freq_ax=freq_ax, win=win_type, fftshift_segs=fftshift_segs, bin_shift=bin_shift, return_dict=True)
+  c = coherence(wf=wf, sr=sr, tau=tau_s, stft=stft, ref_type=ref_type, freq_ax=freq_ax, win=win_type, fftshift_segs=fftshift_segs, bin_shift=bin_shift, return_dict=True)
   coherence = c["coherence"]
   coherence_freq_ax = c["freq_ax"]
 
@@ -219,7 +219,7 @@ def spectrogram(wf, sr, tau_s, xi_s=None, num_segs=None, db=True, fftshift_segs=
       fig_num: int, Optional
   """
   # calculate the segmented fft, which outputs three arrays we will use
-  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, fftshift_segs=fftshift_segs, tau=tau_s, seg_spacing=xi_s)
+  stft_output = stft(wf, sr=sr, num_segs=num_segs, fftshift_segs=fftshift_segs, tau=tau_s, seg_spacing=xi_s)
   # this is the segmented fft itself
   stft = stft_output["stft"]
   # this is the frequency axis
@@ -229,7 +229,7 @@ def spectrogram(wf, sr, tau_s, xi_s=None, num_segs=None, db=True, fftshift_segs=
   # to convert these to time, just divide by sample rate 
   t_ax = seg_start_indices / sr
   # calculate the spectrum of each window
-  win_spectrum = get_welch(wf, sr=sr, tau=tau_s, stft=stft, freq_ax=freq_ax, fftshift_segs=fftshift_segs, scaling=scaling, return_dict=True)["win_spectrum"]
+  win_spectrum = welch(wf, sr=sr, tau=tau_s, stft=stft, freq_ax=freq_ax, fftshift_segs=fftshift_segs, scaling=scaling, return_dict=True)["win_spectrum"]
   # make meshgrid
   xx, yy = np.meshgrid(t_ax, freq_ax)
   if khz:
@@ -319,7 +319,7 @@ def coherogram(wf, sr, tau_s, xi_s, scope=2, freq_ref_step=1, ref_type="next_win
   """
 
   # calculate the segmented fft, which outputs three arrays we will use
-  stft_output = get_stft(wf, sr=sr, num_segs=num_segs, tau=tau_s, seg_spacing=xi_s, fftshift_segs=fftshift_segs)
+  stft_output = stft(wf, sr=sr, num_segs=num_segs, tau=tau_s, seg_spacing=xi_s, fftshift_segs=fftshift_segs)
   # this is the segmented fft itself
   stft = stft_output["stft"]
   # this is the frequency axis
