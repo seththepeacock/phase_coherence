@@ -4,23 +4,21 @@ import scipy as sp
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import pandas as pd
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, kaiserord, firwin, lfilter
 import os
 import pickle
 from phaseco import *
 
-# type: ignore
-# pyright: reportGeneralTypeIssues=false
 
 def load_calc_coherences(
     wf,
     wf_idx,
     wf_fn,
-    wf_len,
+    wf_len_s,
     species,
     fs,
     hpf,
-    pkl_folder,
+    N_xi_folder,
     pw,
     tau,
     tau_s,
@@ -61,57 +59,61 @@ def load_calc_coherences(
     xi_min = round(xi_min_s * fs)
     xi_max = round(xi_max_s * fs)
 
-    # First, try the old way
-    PW_str = f"PW={pw}, " if pw else ""
-    fn_id = rf"{species} {wf_idx}, {PW_str}const_Npd={const_N_pd}, dense_stft=1, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau_s*1000:.0f}ms, max_xi={xi_max_s}, wf_length={wf_len}s, HPF={hpf_str}, wf={wf_fn.split('.')[0]}"
+    # First, try to load in the new way
+    fn_id = rf"{species} {wf_idx}, PW={pw}, win_meth=({win_meth_str}), HPF=({hpf_str}), tau={tau_s*1000:.0f}ms, hop={(hop/fs)*1000:.1f}ms, xi_max={xi_max_s*1000:.1f}ms, wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{fn_id} (Coherences)"
 
-    # Get coherences if they exist in the old way (and we're not forcing a recalc)
+    # Get coherences if they exist (in the new way)
+    pkl_folder = N_xi_folder + r"Pickles/"
+    os.makedirs(pkl_folder, exist_ok=True)
     if os.path.exists(pkl_folder + pkl_fn + ".pkl") and not force_recalc_coherences:
         with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
-            (
-                coherences,
-                f,
-                xis_s,
-                tau_s,
-                rho,
-                N_pd_min,
-                N_pd_max,
-                hop_s,
-                snapping_rhortle,
-                wf_fn,
-                species,
-            ) = pickle.load(file)
-        coherences_dict = {
-            "coherences": coherences,
-            "f": f,
-            "xis_s": xis_s,
-            "tau_s": tau_s,
-            "tau": round(tau_s * fs),
-            "rho": rho,
-            "N_pd_min": N_pd_min,
-            "N_pd_max": N_pd_max,
-            "hop": round(hop_s * fs),
-            "hop_s": hop_s,
-            "snapping_rhortle": snapping_rhortle,
-            "wf_fn": wf_fn,
-            "species": species,
-            "fn_id":fn_id,
-            "win_meth_str":win_meth_str,
-            "hpf_str":hpf_str,
-        }
-    else:
-        # Now, we know they don't exist, so we try the new way
-        fn_id = rf"{species} {wf_idx}, PW={pw}, win_meth=({win_meth_str}), HPF=({hpf_str}), tau={tau_s*1000:.0f}ms, hop={(hop/fs)*1000:.0f}ms, xi_max={xi_max_s*1000:.0f}ms, wf_len={wf_len}s, wf={wf_fn.split('.')[0]}"
-        pkl_fn = f"{fn_id} (Coherences)"
+            (coherences_dict) = pickle.load(file)
 
-        # Get coherences if they exist in the new way
-        if os.path.exists(pkl_folder + pkl_fn + ".pkl") and not force_recalc_coherences:
-            with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
-                # Note these are all the params not explicitly in fn_id
-                (coherences_dict) = pickle.load(file)
+    # Then, try to load in the old way
+    else:
+        PW_str = f"PW={pw}, " if pw else ""
+        fn_id_old = rf"{species} {wf_idx}, {PW_str}const_Npd={const_N_pd}, dense_stft=1, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau_s*1000:.0f}ms, max_xi={xi_max_s}, wf_length={wf_len_s}s, HPF={hpf_str}, wf={wf_fn.split('.')[0]}"
+        pkl_fn_old = f"{fn_id_old} (Coherences)"
+        pkl_folder_old = N_xi_folder + r"Pickles/Old Pickles/"
+        os.makedirs(pkl_folder_old, exist_ok=True)
+
+        # Get coherences if they exist in the old way (and we're not forcing a recalc)
+        if os.path.exists(pkl_folder_old + pkl_fn_old + ".pkl") and not force_recalc_coherences:
+            with open(pkl_folder_old + pkl_fn_old + ".pkl", "rb") as file:
+                (
+                    coherences,
+                    f,
+                    xis_s,
+                    tau_s,
+                    rho,
+                    N_pd_min,
+                    N_pd_max,
+                    hop_s,
+                    snapping_rhortle,
+                    wf_fn,
+                    species,
+                ) = pickle.load(file)
+            coherences_dict = {
+                "coherences": coherences,
+                "f": f,
+                "xis_s": xis_s,
+                "tau_s": tau_s,
+                "tau": round(tau_s * fs),
+                "rho": rho,
+                "N_pd_min": N_pd_min,
+                "N_pd_max": N_pd_max,
+                "hop": round(hop_s * fs),
+                "hop_s": hop_s,
+                "snapping_rhortle": snapping_rhortle,
+                "wf_fn": wf_fn,
+                "species": species,
+                "fn_id":fn_id,
+                "win_meth_str":win_meth_str,
+                "hpf_str":hpf_str,
+            }
         else:
-            # Calculate and dump coherences dict
+            # Now, we know they don't exist as pickles new or old, so we recalculate
             coherences_dict = colossogram_coherences(
                 wf,
                 fs,
@@ -168,7 +170,7 @@ def scale_wf(wf):
     return wf * factor
 
 
-def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len=30, hpf=None):
+def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=30, hpf=None):
     if wf_fn is None:
         if species is None or wf_idx is None:
             raise ValueError("You must input either fn or species and idx!")
@@ -201,13 +203,13 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len=30, hpf=Non
             case 'spectral':
                 wf = spectral_filter(wf, fs, hpf['cf'], type="hp")
             case 'kaiser':
-                raise ValueError("not impl")
+                wf = kaiser_filter(wf, fs, hpf['cf'], hpf['df'], hpf['rip'])
             case _:
                 raise ValueError(f"{hpf['type']} is not a valid HPF type!")
 
     
     # Crop wf
-    wf = crop_wf(wf, fs, wf_len, species)
+    wf = crop_wf(wf, fs, wf_len_s, species)
     
     # Get peak list
     match wf_fn:
@@ -351,10 +353,10 @@ def get_is_signal(
 
     # find frequency bin index closest to our cutoff (NOW JUST 0)
     f_noise_idx = (np.abs(f - f_noise)).argmin()
-    # Get mean and std dev of coherence (over frequency axis, axis=0) for each xi value (using ALL frequencies)
-    noise_means = np.mean(coherences[f_noise_idx:, :], axis=0)
+    # Get mean and std dev of coherence (over frequency axis, axis=1) for each xi value (using ALL frequencies)
+    noise_means = np.mean(coherences[:, f_noise_idx:], axis=1)
     noise_stds = np.std(
-        coherences[f_noise_idx:, :], axis=0, ddof=1
+        coherences[:, f_noise_idx:], axis=1, ddof=1
     )  # ddof=1 since we're using sample mean (not true mean) in sample std estimate
     # Now for each xi value, see if it's noise by determining if it's noise_floor_bw_factor*sigma away from the mean
     is_signal = np.full(len(xis_s), True, dtype=bool)
@@ -396,7 +398,7 @@ def fit_peak(
     ddx_thresh_in_num_cycles,
 ):
     # Get the coherence slice we care about
-    target_coherence = coherences[f_peak_idx, :]
+    target_coherence = coherences[:, f_peak_idx]
 
     if sigma_weighting_power == 0:
         get_fit_sigma = lambda y, sigma_weighting_power: np.ones(len(y))
@@ -471,7 +473,7 @@ def fit_peak(
     if decayed_idx == -1:
         print(f"Signal at {freq:.0f}Hz never decays!")
     # TEST
-    decayed_idx = -1
+    # decayed_idx = -1
 
     # # Find all minima after the dip below the noise floor
     # if end_decay_at == 'Next Min':
@@ -583,3 +585,64 @@ def get_params_from_df(df, peak_freq):
     fwhm = row["FWHM"]
 
     return SNRfit, fwhm
+
+def spectral_filter(wf, fs, cutoff_freq, type="hp"):
+    """Filters waveform by zeroing out frequencies above/below cutoff frequency
+
+    Parameters
+    ------------
+        wf: array
+          waveform input array
+        fs: int
+          sample rate of waveform
+        cutoff_freq: float
+          cutoff frequency for filtering
+        type: str, Optional
+          Either 'hp' for high-pass or 'lp' for low-pass
+    """
+    fft_coefficients = np.fft.rfft(wf)
+    frequencies = np.fft.rfftfreq(len(wf), d=1 / fs)
+
+    if type == "hp":
+        # Zero out coefficients from 0 Hz to cutoff_frequency Hz
+        fft_coefficients[frequencies <= cutoff_freq] = 0
+    elif type == "lp":
+        # Zero out coefficients from cutoff_frequency Hz to Nyquist frequency
+        fft_coefficients[frequencies >= cutoff_freq] = 0
+
+    # Compute the inverse real-valued FFT (irfft)
+    filtered_wf = np.fft.irfft(
+        fft_coefficients, n=len(wf)
+    )  # Ensure output length matches input
+
+    return filtered_wf
+
+def kaiser_filter(wf, fs, cf, df, rip):
+    """
+    Apply a high-pass FIR filter using a Kaiser window.
+
+    Parameters:
+        wf (array): Input waveform.
+        fs (float): Sampling rate (Hz).
+        cf (float): Cutoff frequency (Hz).
+        df (float): Transition bandwidth (Hz).
+        rip (float): Stopband attenuation (dB).
+
+    Returns:
+        array: Filtered waveform.
+    """
+    # Compute filter parameters
+    numtaps, beta = kaiserord(rip, df / (0.5 * fs))
+
+    if numtaps % 2 == 0:
+        numtaps += 1  # Make it odd for a HPF
+
+
+    # Design the high-pass FIR filter
+    taps = firwin(numtaps, cf, window=('kaiser', beta),
+                  scale=False, fs=fs, pass_zero='highpass')
+
+    # Apply filtering
+    filtered_wf = lfilter(taps, [1.0], wf) # b, the denominator, is 1 for no FIR
+
+    return filtered_wf
