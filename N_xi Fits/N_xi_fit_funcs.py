@@ -9,6 +9,8 @@ import os
 import pickle
 from phaseco import *
 
+# type: ignore
+# pyright: reportGeneralTypeIssues=false
 
 def load_calc_coherences(
     wf,
@@ -25,37 +27,46 @@ def load_calc_coherences(
     xi_min_s,
     xi_max_s,
     global_xi_max_s,
-    dyn_win,
+    hop,
+    win_meth,
     force_recalc_coherences,
     const_N_pd,
 ):
-    # Unpack parameters
-    match dyn_win[0]:
-        case "rho":
-            dyn_win_meth, rho, snapping_rhortle = dyn_win
-            dyn_win_str = rf"(rho={rho}, SR={snapping_rhortle})"
-        case "eta":
-            dyn_win_meth, eta, win_type = dyn_win
-            dyn_win_str = rf"(eta={eta}, {win_type})"
-            rho = np.nan
-    match hpf[0]:
-        case "spectral":
-            hpf_type, hpf_cf = hpf
-            hpf_str = rf"({hpf_cf}Hz cf)"
-        case "kaiser":
-            hpf_type, hpf_cf, hpf_df, hpf_rip = hpf
-            hpf_str = rf"({hpf_cf}Hz cf, {hpf_df}Hz df, {hpf_rip}dB rip)"
+    # Define these, otherwise the old way loading will be mad
+    snapping_rhortle = np.nan
+    rho = np.nan
+
+    match hpf['type']:
+        case 'kaiser':
+            hpf_str = rf"{hpf['cf']}Hz cf, {hpf['df']}Hz df, {hpf['rip']}dB rip"
+        case 'spectral':
+            hpf_str = rf"{hpf['cf']}Hz"
+
+    match win_meth['method']:
+        case 'rho':
+            rho = win_meth['rho']
+            snapping_rhortle = win_meth['snapping_rhortle']
+            win_meth_str = f"rho={rho}, SR={snapping_rhortle}"
+        case 'eta':
+            eta = win_meth['eta']
+            win_type = win_meth['win_type']
+            win_meth_str = f"eta={eta}, {win_type}"
+        case 'static':
+            win_type = win_meth['win_type']
+            win_meth_str = f"static {win_type}"
+
+    print(f"Processing {species} {wf_idx} ({win_meth_str}, PW={pw})")
 
     # Convert to samples
-    xi_min = xi_min_s * fs
-    xi_max = xi_max_s * fs
+    xi_min = round(xi_min_s * fs)
+    xi_max = round(xi_max_s * fs)
 
     # First, try the old way
     PW_str = f"PW={pw}, " if pw else ""
-    fn_id = rf"{species} {wf_idx}, {PW_str}const_Npd={const_N_pd}, dense_stft=1, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau_s*1000:.0f}ms, max_xi={xi_max_s}, wf_length={wf_len}s, HPF={hpf_cf}Hz, wf={wf_fn.split('.')[0]}"
+    fn_id = rf"{species} {wf_idx}, {PW_str}const_Npd={const_N_pd}, dense_stft=1, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau_s*1000:.0f}ms, max_xi={xi_max_s}, wf_length={wf_len}s, HPF={hpf_str}, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{fn_id} (Coherences)"
 
-    # Get coherences if they exist in the old way
+    # Get coherences if they exist in the old way (and we're not forcing a recalc)
     if os.path.exists(pkl_folder + pkl_fn + ".pkl") and not force_recalc_coherences:
         with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
             (
@@ -71,52 +82,60 @@ def load_calc_coherences(
                 wf_fn,
                 species,
             ) = pickle.load(file)
-            hop = round(hop_s * fs)
         coherences_dict = {
             "coherences": coherences,
             "f": f,
             "xis_s": xis_s,
             "tau_s": tau_s,
+            "tau": round(tau_s * fs),
             "rho": rho,
             "N_pd_min": N_pd_min,
             "N_pd_max": N_pd_max,
-            "hop": hop,
+            "hop": round(hop_s * fs),
+            "hop_s": hop_s,
             "snapping_rhortle": snapping_rhortle,
             "wf_fn": wf_fn,
             "species": species,
+            "fn_id":fn_id,
+            "win_meth_str":win_meth_str,
+            "hpf_str":hpf_str,
         }
-        return coherences_dict, fn_id
-
-    # Now, we know they don't exist, so we try the new way
-    fn_id = rf"{species} {wf_idx}, PW={pw}, dyn_win={dyn_win_str}, HPF={hpf_str}, tau={tau_s*1000:.0f}ms, xi_min={xi_min_s*1000:.0f}ms, xi_max={xi_max_s*1000:.0f}ms, wf_len={wf_len}s, wf={wf_fn.split('.')[0]}"
-    pkl_fn = f"{fn_id} (Coherences)"
-
-    # Get coherences if they exist in the new way
-    if os.path.exists(pkl_folder + pkl_fn + ".pkl") and not force_recalc_coherences:
-        with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
-            # Note these are all the params not explicitly in fn_id
-            (coherences_dict) = pickle.load(file)
     else:
-        # Calculate and dump coherences dict
-        coherences_dict = colossogram_coherences(
-            wf,
-            fs,
-            xi_min,
-            xi_max,
-            delta_xi=xi_min,
-            hop=xi_min,
-            tau=tau,
-            dyn_win=dyn_win,
-            pw=pw,
-            const_N_pd=const_N_pd,
-            global_xi_max_s=global_xi_max_s,
-            return_dict=True,
-        )
+        # Now, we know they don't exist, so we try the new way
+        fn_id = rf"{species} {wf_idx}, PW={pw}, win_meth=({win_meth_str}), HPF=({hpf_str}), tau={tau_s*1000:.0f}ms, hop={(hop/fs)*1000:.0f}ms, xi_max={xi_max_s*1000:.0f}ms, wf_len={wf_len}s, wf={wf_fn.split('.')[0]}"
+        pkl_fn = f"{fn_id} (Coherences)"
 
-        with open(pkl_folder + pkl_fn + ".pkl", "wb") as file:
-            pickle.dump(coherences_dict, file)
-    # We now have coherences_dict either from the pickle or from the calculation; return it!
-    return coherences_dict, fn_id
+        # Get coherences if they exist in the new way
+        if os.path.exists(pkl_folder + pkl_fn + ".pkl") and not force_recalc_coherences:
+            with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
+                # Note these are all the params not explicitly in fn_id
+                (coherences_dict) = pickle.load(file)
+        else:
+            # Calculate and dump coherences dict
+            coherences_dict = colossogram_coherences(
+                wf,
+                fs,
+                xis={'xi_min':xi_min, 'xi_max':xi_max, 'delta_xi':xi_min},
+                hop=hop,
+                tau=tau,
+                win_meth=win_meth,
+                pw=pw,
+                const_N_pd=const_N_pd,
+                global_xi_max_s=global_xi_max_s,
+                return_dict=True,
+            )
+            # Add some extra keys
+            extra_keys = {
+                "fn_id":fn_id,
+                "win_meth_str":win_meth_str,
+                "hpf_str":hpf_str,
+            }
+            coherences_dict.update(extra_keys)
+
+            with open(pkl_folder + pkl_fn + ".pkl", "wb") as file:
+                pickle.dump(coherences_dict, file)
+    # We now have coherences_dict either from a saved pickle (new or old) or from the calculation; return it!
+    return coherences_dict
 
 
 def scale_wf_long_way(wf):
@@ -149,26 +168,21 @@ def scale_wf(wf):
     return wf * factor
 
 
-def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
+def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len=30, hpf=None):
     if wf_fn is None:
         if species is None or wf_idx is None:
             raise ValueError("You must input either fn or species and idx!")
         else:
             wf_fn = get_fn(species, wf_idx)
-    # print("WF file name:", wf_fn)
-    # Load matlab file
+    
+    # Load wf
     N_xi_folder = r"N_xi Fits/"
     data_folder = N_xi_folder + r"Data/"
     if species == "Tokay":
         wf = sio.loadmat(data_folder + wf_fn)["wf"][0]
+
     else:
         wf = sio.loadmat(data_folder + wf_fn)["wf"][:, 0]
-
-    if species in ["Anole", "Human"] and scale:
-        wf = sio.loadmat(data_folder + wf_fn)["wf"][:, 0]
-
-    if species in ["Anole", "Human"] and scale:
-        wf = scale_wf(wf)
 
 
     # Get fs
@@ -176,6 +190,25 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
         fs = 48000
     else:
         fs = 44100
+
+    # Scale wf
+    if species in ["Anole", "Human"] and scale:
+        wf = scale_wf(wf)
+
+    # Apply HPF
+    if hpf is not None:
+        match hpf['type']:
+            case 'spectral':
+                wf = spectral_filter(wf, fs, hpf['cf'], type="hp")
+            case 'kaiser':
+                raise ValueError("not impl")
+            case _:
+                raise ValueError(f"{hpf['type']} is not a valid HPF type!")
+
+    
+    # Crop wf
+    wf = crop_wf(wf, fs, wf_len, species)
+    
     # Get peak list
     match wf_fn:
         # Anoles
@@ -255,17 +288,17 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True):
 
 
 
-def crop_wf(wf, fs, wf_length, species):
+def crop_wf(wf, fs, wf_len_s, species):
     if species == "Tokay":
-        wf_lengthS = round(wf_length * fs)
+        wf_len = round(wf_len_s * fs)
         og_length = len(wf)
-        if og_length < wf_lengthS:
-            raise ValueError(f"Waveform is less than {wf_length}s long!")
+        if og_length < wf_len:
+            raise ValueError(f"Waveform is less than {wf_len_s}s long!")
         # Start index for the middle chunk
-        start = max(0, (og_length - wf_length) // 2)
-        wf = wf[start : start + wf_lengthS]
+        start = max(0, (og_length - wf_len_s) // 2)
+        wf = wf[start : start + wf_len]
     else:  # Just keeping it this way for consistency (it shouldn't matter), will do oeverything the Tokay way if/when we do the final recalc
-        wf = wf[: int(wf_length * fs)]
+        wf = wf[: int(wf_len_s * fs)]
     return wf
 
 
@@ -338,7 +371,7 @@ def get_is_signal(
         is_signal[xi_idx] = coherence_value > noise_floor_upper_limit
 
 
-    return is_signal, target_coherence, noise_means, noise_stds
+    return is_signal, noise_means, noise_stds
 
 
 
@@ -358,7 +391,7 @@ def fit_peak(
     coherences,
     xis_s,
     wf_fn,
-    rho,
+    win_meth_str,
     ddx_thresh,
     ddx_thresh_in_num_cycles,
 ):
@@ -454,7 +487,7 @@ def fit_peak(
 
 
     # Curve Fit
-    print(f"Fitting exp decay to {freq:.0f}Hz peak on {wf_fn} with rho={rho}")
+    print(f"Fitting exp decay to {freq:.0f}Hz peak on {wf_fn} with win_meth={win_meth_str}")
     # Crop arrays to the fit range
     xis_s_fit_crop = xis_s[decay_start_idx:decayed_idx]
     target_coherence_fit_crop = target_coherence[decay_start_idx:decayed_idx]
