@@ -8,9 +8,10 @@ from scipy.signal import find_peaks, kaiserord, firwin, lfilter
 import os
 import pickle
 from phaseco import *
+import time
 
 
-def load_calc_coherences(
+def load_calc_colossogram(
     wf,
     wf_idx,
     wf_fn,
@@ -27,7 +28,7 @@ def load_calc_coherences(
     global_xi_max_s,
     hop,
     win_meth,
-    force_recalc_coherences,
+    force_recalc_colossogram,
     const_N_pd,
 ):
     # Define these, otherwise the old way loading will be mad
@@ -60,15 +61,15 @@ def load_calc_coherences(
     xi_max = round(xi_max_s * fs)
 
     # First, try to load in the new way
-    fn_id = rf"{species} {wf_idx}, PW={pw}, win_meth=({win_meth_str}), HPF=({hpf_str}), tau={tau_s*1000:.0f}ms, hop={(hop/fs)*1000:.1f}ms, xi_max={xi_max_s*1000:.1f}ms, wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
-    pkl_fn = f"{fn_id} (Coherences)"
+    fn_id = rf"{species} {wf_idx}, PW={pw}, win_meth=({win_meth_str}), hop={(hop/fs)*1000:.0f}ms, tau={tau_s*1000:.0f}ms, HPF=({hpf_str}), xi_max={xi_max_s*1000:.0f}ms, wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+    pkl_fn = f"{fn_id} (Colossogram)"
 
-    # Get coherences if they exist (in the new way)
+    # Get colossogram if they exist (in the new way)
     pkl_folder = N_xi_folder + r"Pickles/"
     os.makedirs(pkl_folder, exist_ok=True)
-    if os.path.exists(pkl_folder + pkl_fn + ".pkl") and not force_recalc_coherences:
+    if os.path.exists(pkl_folder + pkl_fn + ".pkl") and not force_recalc_colossogram:
         with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
-            (coherences_dict) = pickle.load(file)
+            (colossogram_dict) = pickle.load(file)
 
     # Then, try to load in the old way
     else:
@@ -78,11 +79,11 @@ def load_calc_coherences(
         pkl_folder_old = N_xi_folder + r"Pickles/Old Pickles/"
         os.makedirs(pkl_folder_old, exist_ok=True)
 
-        # Get coherences if they exist in the old way (and we're not forcing a recalc)
-        if os.path.exists(pkl_folder_old + pkl_fn_old + ".pkl") and not force_recalc_coherences:
+        # Get colossogram if they exist in the old way (and we're not forcing a recalc)
+        if os.path.exists(pkl_folder_old + pkl_fn_old + ".pkl") and not force_recalc_colossogram:
             with open(pkl_folder_old + pkl_fn_old + ".pkl", "rb") as file:
                 (
-                    coherences,
+                    colossogram,
                     f,
                     xis_s,
                     tau_s,
@@ -94,8 +95,8 @@ def load_calc_coherences(
                     wf_fn,
                     species,
                 ) = pickle.load(file)
-            coherences_dict = {
-                "coherences": coherences,
+            colossogram_dict = {
+                "colossogram": colossogram,
                 "f": f,
                 "xis_s": xis_s,
                 "tau_s": tau_s,
@@ -114,7 +115,7 @@ def load_calc_coherences(
             }
         else:
             # Now, we know they don't exist as pickles new or old, so we recalculate
-            coherences_dict = colossogram_coherences(
+            colossogram_dict = get_colossogram(
                 wf,
                 fs,
                 xis={'xi_min':xi_min, 'xi_max':xi_max, 'delta_xi':xi_min},
@@ -132,12 +133,12 @@ def load_calc_coherences(
                 "win_meth_str":win_meth_str,
                 "hpf_str":hpf_str,
             }
-            coherences_dict.update(extra_keys)
+            colossogram_dict.update(extra_keys)
 
             with open(pkl_folder + pkl_fn + ".pkl", "wb") as file:
-                pickle.dump(coherences_dict, file)
-    # We now have coherences_dict either from a saved pickle (new or old) or from the calculation; return it!
-    return coherences_dict
+                pickle.dump(colossogram_dict, file)
+    # We now have colossogram_dict either from a saved pickle (new or old) or from the calculation; return it!
+    return colossogram_dict
 
 
 def scale_wf_long_way(wf):
@@ -170,7 +171,7 @@ def scale_wf(wf):
     return wf * factor
 
 
-def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=30, hpf=None):
+def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=None):
     if wf_fn is None:
         if species is None or wf_idx is None:
             raise ValueError("You must input either fn or species and idx!")
@@ -197,6 +198,9 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=30, hpf=N
     if species in ["Anole", "Human"] and scale:
         wf = scale_wf(wf)
 
+    # Crop wf
+    wf = crop_wf(wf, fs, wf_len_s)
+
     # Apply HPF
     if hpf is not None:
         match hpf['type']:
@@ -207,9 +211,6 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=30, hpf=N
             case _:
                 raise ValueError(f"{hpf['type']} is not a valid HPF type!")
 
-    
-    # Crop wf
-    wf = crop_wf(wf, fs, wf_len_s, species)
     
     # Get peak list
     match wf_fn:
@@ -290,20 +291,29 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=30, hpf=N
 
 
 
-def crop_wf(wf, fs, wf_len_s, species):
-    if species == "Tokay":
-        wf_len = round(wf_len_s * fs)
-        og_length = len(wf)
-        if og_length < wf_len:
-            raise ValueError(f"Waveform is less than {wf_len_s}s long!")
-        # Start index for the middle chunk
-        start = max(0, (og_length - wf_len_s) // 2)
-        wf = wf[start : start + wf_len]
-    else:  # Just keeping it this way for consistency (it shouldn't matter), will do oeverything the Tokay way if/when we do the final recalc
-        wf = wf[: int(wf_len_s * fs)]
-    return wf
+# def crop_wf(wf, fs, wf_len_s, species):
+#     if species == "Tokay":
+#         wf_len = round(wf_len_s * fs)
+#         og_length = len(wf)
+#         if og_length < wf_len:
+#             raise ValueError(f"Waveform is less than {wf_len_s}s long!")
+#         # Start index for the middle chunk
+#         start = max(0, (og_length - wf_len_s) // 2)
+#         wf = wf[start : start + wf_len]
+#     else:  # Just keeping it this way for consistency (it shouldn't matter), will do oeverything the Tokay way if/when we do the final recalc
+#         wf = wf[: int(wf_len_s * fs)]
+#     return wf
 
+def crop_wf(wf, fs, wf_len_s):
+    desired_wf_len = round(wf_len_s * fs)
+    og_wf_len = len(wf)
+    if og_wf_len < desired_wf_len:
+        raise ValueError(f"Waveform is less than {wf_len_s}s long!")
+    # Start index for the middle chunk
+    start = max(0, (og_wf_len - desired_wf_len) // 2)
+    wf_cropped = wf[start : start + desired_wf_len]
 
+    return wf_cropped
 
 
 def get_fn(species, idx):
@@ -346,7 +356,7 @@ def get_fn(species, idx):
 
 
 def get_is_signal(
-    coherences, f, xis_s, target_coherence, f_noise=0, noise_floor_bw_factor=None
+    colossogram, f, xis_s, target_coherence, f_noise=0, noise_floor_bw_factor=None
 ):
     if noise_floor_bw_factor is None:
         raise ValueError("You must input noise_floor_bw_factor!")
@@ -354,9 +364,9 @@ def get_is_signal(
     # find frequency bin index closest to our cutoff (NOW JUST 0)
     f_noise_idx = (np.abs(f - f_noise)).argmin()
     # Get mean and std dev of coherence (over frequency axis, axis=1) for each xi value (using ALL frequencies)
-    noise_means = np.mean(coherences[:, f_noise_idx:], axis=1)
+    noise_means = np.mean(colossogram[:, f_noise_idx:], axis=1)
     noise_stds = np.std(
-        coherences[:, f_noise_idx:], axis=1, ddof=1
+        colossogram[:, f_noise_idx:], axis=1, ddof=1
     )  # ddof=1 since we're using sample mean (not true mean) in sample std estimate
     # Now for each xi value, see if it's noise by determining if it's noise_floor_bw_factor*sigma away from the mean
     is_signal = np.full(len(xis_s), True, dtype=bool)
@@ -390,7 +400,7 @@ def fit_peak(
     sigma_weighting_power,
     bounds,
     p0,
-    coherences,
+    colossogram,
     xis_s,
     wf_fn,
     win_meth_str,
@@ -398,7 +408,7 @@ def fit_peak(
     ddx_thresh_in_num_cycles,
 ):
     # Get the coherence slice we care about
-    target_coherence = coherences[:, f_peak_idx]
+    target_coherence = colossogram[:, f_peak_idx]
 
     if sigma_weighting_power == 0:
         get_fit_sigma = lambda y, sigma_weighting_power: np.ones(len(y))
@@ -408,7 +418,7 @@ def fit_peak(
         )
     # Calculate signal vs noise and point of decay
     is_signal, noise_means, noise_stds = get_is_signal(
-        coherences,
+        colossogram,
         f,
         xis_s,
         target_coherence,
@@ -631,6 +641,8 @@ def kaiser_filter(wf, fs, cf, df, rip):
     Returns:
         array: Filtered waveform.
     """
+    print(f"Filtering wf with cf={cf}Hz, df={df}Hz, rip={rip}dB")
+    start = time.time()
     # Compute filter parameters
     numtaps, beta = kaiserord(rip, df / (0.5 * fs))
 
@@ -644,5 +656,6 @@ def kaiser_filter(wf, fs, cf, df, rip):
 
     # Apply filtering
     filtered_wf = lfilter(taps, [1.0], wf) # b, the denominator, is 1 for no FIR
-
+    stop = time.time()
+    print(f"Filtering took {stop-start:.3f}s")
     return filtered_wf
