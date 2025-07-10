@@ -11,6 +11,7 @@ from phaseco import *
 import time
 
 
+
 def load_calc_colossogram(
     wf,
     wf_idx,
@@ -35,23 +36,23 @@ def load_calc_colossogram(
     snapping_rhortle = np.nan
     rho = np.nan
 
-    match hpf['type']:
-        case 'kaiser':
+    match hpf["type"]:
+        case "kaiser":
             hpf_str = rf"{hpf['cf']}Hz cf, {hpf['df']}Hz df, {hpf['rip']}dB rip"
-        case 'spectral':
+        case "spectral":
             hpf_str = rf"{hpf['cf']}Hz"
 
-    match win_meth['method']:
-        case 'rho':
-            rho = win_meth['rho']
-            snapping_rhortle = win_meth['snapping_rhortle']
+    match win_meth["method"]:
+        case "rho":
+            rho = win_meth["rho"]
+            snapping_rhortle = win_meth["snapping_rhortle"]
             win_meth_str = f"rho={rho}, SR={snapping_rhortle}"
-        case 'eta':
-            eta = win_meth['eta']
-            win_type = win_meth['win_type']
+        case "eta":
+            eta = win_meth["eta"]
+            win_type = win_meth["win_type"]
             win_meth_str = f"eta={eta}, {win_type}"
-        case 'static':
-            win_type = win_meth['win_type']
+        case "static":
+            win_type = win_meth["win_type"]
             win_meth_str = f"static {win_type}"
 
     print(f"Processing {species} {wf_idx} ({win_meth_str}, PW={pw})")
@@ -80,7 +81,10 @@ def load_calc_colossogram(
         os.makedirs(pkl_folder_old, exist_ok=True)
 
         # Get colossogram if they exist in the old way (and we're not forcing a recalc)
-        if os.path.exists(pkl_folder_old + pkl_fn_old + ".pkl") and not force_recalc_colossogram:
+        if (
+            os.path.exists(pkl_folder_old + pkl_fn_old + ".pkl")
+            and not force_recalc_colossogram
+        ):
             with open(pkl_folder_old + pkl_fn_old + ".pkl", "rb") as file:
                 (
                     colossogram,
@@ -109,16 +113,16 @@ def load_calc_colossogram(
                 "snapping_rhortle": snapping_rhortle,
                 "wf_fn": wf_fn,
                 "species": species,
-                "fn_id":fn_id,
-                "win_meth_str":win_meth_str,
-                "hpf_str":hpf_str,
+                "fn_id": fn_id,
+                "win_meth_str": win_meth_str,
+                "hpf_str": hpf_str,
             }
         else:
             # Now, we know they don't exist as pickles new or old, so we recalculate
             colossogram_dict = get_colossogram(
                 wf,
                 fs,
-                xis={'xi_min':xi_min, 'xi_max':xi_max, 'delta_xi':xi_min},
+                xis={"xi_min": xi_min, "xi_max": xi_max, "delta_xi": xi_min},
                 hop=hop,
                 tau=tau,
                 win_meth=win_meth,
@@ -129,9 +133,9 @@ def load_calc_colossogram(
             )
             # Add some extra keys
             extra_keys = {
-                "fn_id":fn_id,
-                "win_meth_str":win_meth_str,
-                "hpf_str":hpf_str,
+                "fn_id": fn_id,
+                "win_meth_str": win_meth_str,
+                "hpf_str": hpf_str,
             }
             colossogram_dict.update(extra_keys)
 
@@ -160,9 +164,7 @@ def scale_wf_long_way(wf):
     wf_pa = wf * 20 * 1e-6
     # Now, using this version, we would have to do 20*np.log10(dft_mags(wf_pa) / (20*1e-6)) to get dB SPL.)
 
-
     return wf_pa
-
 
 
 def scale_wf(wf):
@@ -177,7 +179,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
             raise ValueError("You must input either fn or species and idx!")
         else:
             wf_fn = get_fn(species, wf_idx)
-    
+
     # Load wf
     N_xi_folder = r"N_xi Fits/"
     data_folder = N_xi_folder + r"Data/"
@@ -186,7 +188,6 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
 
     else:
         wf = sio.loadmat(data_folder + wf_fn)["wf"][:, 0]
-
 
     # Get fs
     if wf_fn in ["Owl2R1.mat", "Owl7L1.mat"]:
@@ -203,15 +204,14 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
 
     # Apply HPF
     if hpf is not None:
-        match hpf['type']:
-            case 'spectral':
-                wf = spectral_filter(wf, fs, hpf['cf'], type="hp")
-            case 'kaiser':
-                wf = kaiser_filter(wf, fs, hpf['cf'], hpf['df'], hpf['rip'])
+        match hpf["type"]:
+            case "spectral":
+                wf = spectral_filter(wf, fs, hpf["cf"], type="hp")
+            case "kaiser":
+                wf = kaiser_filter(wf, fs, hpf["cf"], hpf["df"], hpf["rip"])
             case _:
                 raise ValueError(f"{hpf['type']} is not a valid HPF type!")
 
-    
     # Get peak list
     match wf_fn:
         # Anoles
@@ -232,7 +232,6 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
             becky_good_peak_freqs = [1798, 2143, 2406, 2778]
             bad_peak_freqs = []
 
-
         # Tokays
         case "tokay_GG1rearSOAEwf.mat":  # 0
             seth_good_peak_freqs = [1184, 1572, 3214, 3714]
@@ -246,7 +245,6 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
         case "tokay_GG4rearSOAEwf.mat":  # 3
             seth_good_peak_freqs = [1104, 2288, 2837, 3160]
             bad_peak_freqs = []
-
 
         # Owls
         case "Owl2R1.mat":  # 0
@@ -290,7 +288,6 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
     return wf, wf_fn, fs, np.array(good_peak_freqs), np.array(bad_peak_freqs)
 
 
-
 # def crop_wf(wf, fs, wf_len_s, species):
 #     if species == "Tokay":
 #         wf_len = round(wf_len_s * fs)
@@ -303,6 +300,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
 #     else:  # Just keeping it this way for consistency (it shouldn't matter), will do oeverything the Tokay way if/when we do the final recalc
 #         wf = wf[: int(wf_len_s * fs)]
 #     return wf
+
 
 def crop_wf(wf, fs, wf_len_s):
     desired_wf_len = round(wf_len_s * fs)
@@ -355,222 +353,6 @@ def get_fn(species, idx):
             raise ValueError("Species must be 'Anole', 'Human', 'Tokay', or 'Owl'!")
 
 
-def get_is_signal(
-    colossogram, f, xis_s, target_coherence, f_noise=0, noise_floor_bw_factor=None
-):
-    if noise_floor_bw_factor is None:
-        raise ValueError("You must input noise_floor_bw_factor!")
-
-    # find frequency bin index closest to our cutoff (NOW JUST 0)
-    f_noise_idx = (np.abs(f - f_noise)).argmin()
-    # Get mean and std dev of coherence (over frequency axis, axis=1) for each xi value (using ALL frequencies)
-    noise_means = np.mean(colossogram[:, f_noise_idx:], axis=1)
-    noise_stds = np.std(
-        colossogram[:, f_noise_idx:], axis=1, ddof=1
-    )  # ddof=1 since we're using sample mean (not true mean) in sample std estimate
-    # Now for each xi value, see if it's noise by determining if it's noise_floor_bw_factor*sigma away from the mean
-    is_signal = np.full(len(xis_s), True, dtype=bool)
-
-    for xi_idx in range(len(xis_s)):
-        if xi_idx < 5:
-            is_signal[xi_idx] = True
-            continue
-        coherence_value = target_coherence[xi_idx]
-        noise_floor_upper_limit = (
-            noise_means[xi_idx] + noise_floor_bw_factor * noise_stds[xi_idx]
-        )
-        # Calculate whether we're above noise floor for each xi value
-        is_signal[xi_idx] = coherence_value > noise_floor_upper_limit
-
-
-    return is_signal, noise_means, noise_stds
-
-
-
-def exp_decay(x, T, amp):
-    return amp * np.exp(-x / T)
-
-
-def fit_peak(
-    f,
-    f_peak_idx,
-    noise_floor_bw_factor,
-    decay_start_max_xi,
-    trim_step,
-    sigma_weighting_power,
-    bounds,
-    p0,
-    colossogram,
-    xis_s,
-    wf_fn,
-    win_meth_str,
-    ddx_thresh,
-    ddx_thresh_in_num_cycles,
-):
-    # Get the coherence slice we care about
-    target_coherence = colossogram[:, f_peak_idx]
-
-    if sigma_weighting_power == 0:
-        get_fit_sigma = lambda y, sigma_weighting_power: np.ones(len(y))
-    else:
-        get_fit_sigma = lambda y, sigma_weighting_power: 1 / (
-            y**sigma_weighting_power + 1e-9
-        )
-    # Calculate signal vs noise and point of decay
-    is_signal, noise_means, noise_stds = get_is_signal(
-        colossogram,
-        f,
-        xis_s,
-        target_coherence,
-        noise_floor_bw_factor=noise_floor_bw_factor,
-    )
-    is_noise = ~is_signal
-    # Get target frequency
-    freq = f[f_peak_idx]
-
-    # Find where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi]
-    decay_start_max_xi_idx = np.argmin(np.abs(xis_s - decay_start_max_xi))
-    maxima = find_peaks(target_coherence[:decay_start_max_xi_idx], prominence=0.01)[0]
-    num_maxima = len(maxima)
-    match num_maxima:
-        case 1:
-            print(
-                f"One peak found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit here"
-            )
-            decay_start_idx = maxima[0]
-        case 2:
-            print(
-                f"Two peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at second one!"
-            )
-            decay_start_idx = maxima[1]
-        case 0:
-            print(
-                f"No peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at first xi!"
-            )
-            decay_start_idx = 0
-        case _:
-            print(
-                f"Three or more peaks found in first {decay_start_max_xi*1000:.0f}ms of xi, starting fit at last one!"
-            )
-            decay_start_idx = maxima[-1]
-
-
-    # Find first time there is a "minimum" OR a dip below the noise floor
-    decayed_idx = -1
-    if ddx_thresh_in_num_cycles:
-        ddx_thresh = ddx_thresh * freq
-
-
-    # Since we use a derivative criteria and it starts at a local max, we should give it a few ms for the derivative to get nice and negative
-    ddx_search_buffer_sec = 0.005  # Corresponds to ~5 points since xi=0.001
-    decay_start_s = xis_s[decay_start_idx]
-    ddx_search_start_s = decay_start_s + ddx_search_buffer_sec
-    ddx_search_start_idx = np.argmin(np.abs(xis_s - ddx_search_start_s))
-
-    for i in range(ddx_search_start_idx, len(target_coherence) - 1):
-        if not is_signal[i]:
-            decayed_idx = i
-            break
-        else:
-            ddx = (target_coherence[i + 1] - target_coherence[i]) / (
-                xis_s[i + 1] - xis_s[i]
-            )
-            if ddx > ddx_thresh:
-                decayed_idx = i
-                break
-
-
-    if decayed_idx == -1:
-        print(f"Signal at {freq:.0f}Hz never decays!")
-    # TEST
-    # decayed_idx = -1
-
-    # # Find all minima after the dip below the noise floor
-    # if end_decay_at == 'Next Min':
-    #     minima = find_peaks(-target_coherence[dip_below_noise_floor_idx:])[0]
-    #     if len(minima) == 0:
-    #         # If no minima, just set decayed_idx to the dip below noise floor
-    #         decayed_idx = dip_below_noise_floor_idx
-    #     else:
-    #         # If there are minima, take the first one after the dip below noise floor
-    #         decayed_idx = dip_below_noise_floor_idx + minima[0]
-    # else:
-    #     decayed_idx = dip_below_noise_floor_idx
-
-
-    # Curve Fit
-    print(f"Fitting exp decay to {freq:.0f}Hz peak on {wf_fn} with win_meth={win_meth_str}")
-    # Crop arrays to the fit range
-    xis_s_fit_crop = xis_s[decay_start_idx:decayed_idx]
-    target_coherence_fit_crop = target_coherence[decay_start_idx:decayed_idx]
-    sigma = get_fit_sigma(target_coherence_fit_crop, sigma_weighting_power)
-    failures = 0
-    popt = None
-
-    while len(xis_s_fit_crop) > trim_step and popt is None:
-        try:
-            popt, pcov = curve_fit(
-                exp_decay,
-                xis_s_fit_crop,
-                target_coherence_fit_crop,
-                p0=p0,
-                sigma=sigma,
-                bounds=bounds,
-            )
-            break  # Fit succeeded!
-        except (RuntimeError, ValueError) as e:
-            # Trim the x, y,
-            failures += 1
-            xis_s_fit_crop = xis_s_fit_crop[trim_step:-trim_step]
-            target_coherence_fit_crop = target_coherence_fit_crop[trim_step:-trim_step]
-            sigma = sigma[trim_step:-trim_step]
-
-            print(
-                f"Fit failed (attempt {failures}): — trimmed to {len(xis_s_fit_crop)} points"
-            )
-
-    # HAndle case where curve fit fails
-    if popt is None:
-        print(f"Curve fit failed after all attempts ({freq:.0f}Hz from {wf_fn})")
-        T, T_std, A, A_std, mse, xis_s_fit_crop, fitted_exp_decay = (
-            -1,
-            -1,
-            -1,
-            -1,
-            -1,
-            -1,
-            -1,
-        )
-        # raise RuntimeError(f"Curve fit failed after all attempts ({freq:.0f}Hz from {wf_fn})")
-    else:
-        # If successful, get the paramters and standard deviation
-        perr = np.sqrt(np.diag(pcov))
-        T = popt[0]
-        T_std = perr[0]
-        A = popt[1]
-        A_std = perr[1]
-        # Get the fitted exponential decay
-        fitted_exp_decay = exp_decay(xis_s_fit_crop, *popt)
-
-        # Calculate MSE
-        mse = np.mean((fitted_exp_decay - target_coherence_fit_crop) ** 2)
-
-    return (
-        T,
-        T_std,
-        A,
-        A_std,
-        mse,
-        is_signal,
-        is_noise,
-        decay_start_idx,
-        decayed_idx,
-        target_coherence,
-        xis_s_fit_crop,
-        fitted_exp_decay,
-        noise_means,
-        noise_stds,
-    )
 
 
 def get_spreadsheet_df(wf_fn, species):
@@ -595,6 +377,7 @@ def get_params_from_df(df, peak_freq):
     fwhm = row["FWHM"]
 
     return SNRfit, fwhm
+
 
 def spectral_filter(wf, fs, cutoff_freq, type="hp"):
     """Filters waveform by zeroing out frequencies above/below cutoff frequency
@@ -627,6 +410,7 @@ def spectral_filter(wf, fs, cutoff_freq, type="hp"):
 
     return filtered_wf
 
+
 def kaiser_filter(wf, fs, cf, df, rip):
     """
     Apply a high-pass FIR filter using a Kaiser window.
@@ -649,13 +433,13 @@ def kaiser_filter(wf, fs, cf, df, rip):
     if numtaps % 2 == 0:
         numtaps += 1  # Make it odd for a HPF
 
-
     # Design the high-pass FIR filter
-    taps = firwin(numtaps, cf, window=('kaiser', beta),
-                  scale=False, fs=fs, pass_zero='highpass')
+    taps = firwin(
+        numtaps, cf, window=("kaiser", beta), scale=False, fs=fs, pass_zero="highpass"
+    )
 
     # Apply filtering
-    filtered_wf = lfilter(taps, [1.0], wf) # b, the denominator, is 1 for no FIR
+    filtered_wf = lfilter(taps, [1.0], wf)  # b, the denominator, is 1 for no FIR
     stop = time.time()
     print(f"Filtering took {stop-start:.3f}s")
     return filtered_wf
