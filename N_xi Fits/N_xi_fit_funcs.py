@@ -8,6 +8,7 @@ from scipy.signal import find_peaks, kaiserord, firwin, lfilter
 import os
 import pickle
 from phaseco import *
+from phaseco.helper_funcs import get_win_meth_str
 import time
 
 
@@ -42,18 +43,7 @@ def load_calc_colossogram(
         case "spectral":
             hpf_str = rf"{hpf['cf']}Hz"
 
-    match win_meth["method"]:
-        case "rho":
-            rho = win_meth["rho"]
-            snapping_rhortle = win_meth["snapping_rhortle"]
-            win_meth_str = f"rho={rho}, SR={snapping_rhortle}"
-        case "eta":
-            eta = win_meth["eta"]
-            win_type = win_meth["win_type"]
-            win_meth_str = f"eta={eta}, {win_type}"
-        case "static":
-            win_type = win_meth["win_type"]
-            win_meth_str = f"static {win_type}"
+    win_meth_str = get_win_meth_str(win_meth)
 
     print(f"Processing {species} {wf_idx} ({win_meth_str}, PW={pw})")
 
@@ -62,7 +52,7 @@ def load_calc_colossogram(
     xi_max = round(xi_max_s * fs)
 
     # First, try to load in the new way
-    fn_id = rf"{species} {wf_idx}, PW={pw}, win_meth=({win_meth_str}), hop={(hop/fs)*1000:.0f}ms, tau={tau_s*1000:.0f}ms, HPF=({hpf_str}), xi_max={xi_max_s*1000:.0f}ms, wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+    fn_id = rf"{species} {wf_idx}, PW={pw}, {win_meth_str}, hop={(hop/fs)*1000:.0f}ms, tau={tau_s*1000:.0f}ms, HPF=({hpf_str}), xi_max={xi_max_s*1000:.0f}ms, wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{fn_id} (Colossogram)"
 
     # Get colossogram if they exist (in the new way)
@@ -185,7 +175,8 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
     data_folder = N_xi_folder + r"Data/"
     if species == "Tokay":
         wf = sio.loadmat(data_folder + wf_fn)["wf"][0]
-
+    elif species == 'Vaclav Human':
+        wf = sio.loadmat(data_folder + wf_fn)['oae'][:, 0]
     else:
         wf = sio.loadmat(data_folder + wf_fn)["wf"][:, 0]
 
@@ -199,21 +190,26 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
     if species in ["Anole", "Human"] and scale:
         wf = scale_wf(wf)
 
-    # Crop wf
-    wf = crop_wf(wf, fs, wf_len_s)
+    if species != 'Vaclav Human':
+        # Crop wf
+        wf = crop_wf(wf, fs, wf_len_s)
 
-    # Apply HPF
-    if hpf is not None:
-        match hpf["type"]:
-            case "spectral":
-                wf = spectral_filter(wf, fs, hpf["cf"], type="hp")
-            case "kaiser":
-                wf = kaiser_filter(wf, fs, hpf["cf"], hpf["df"], hpf["rip"])
-            case _:
-                raise ValueError(f"{hpf['type']} is not a valid HPF type!")
+        # Apply HPF
+        if hpf is not None and species:
+            match hpf["type"]:
+                case "spectral":
+                    wf = spectral_filter(wf, fs, hpf["cf"], type="hp")
+                case "kaiser":
+                    wf = kaiser_filter(wf, fs, hpf["cf"], hpf["df"], hpf["rip"])
+                case _:
+                    raise ValueError(f"{hpf['type']} is not a valid HPF type!")
 
     # Get peak list
     match wf_fn:
+        # Vaclav's Human
+        case 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat':
+            good_peak_freqs = [1077, 1276, 1367, 2180]
+            bad_peak_freqs = []
         # Anoles
         case "AC6rearSOAEwfB1.mat":  # 0
             seth_good_peak_freqs = [1233, 2164, 3714, 4500]
@@ -281,10 +277,11 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
             seth_good_peak_freqs = [904, 1518, 2040, 2697]
             becky_good_peak_freqs = [904, 1518, 2040, 2697]
             bad_peak_freqs = []
-    if species != "Tokay":
-        good_peak_freqs = becky_good_peak_freqs
-    else:
-        good_peak_freqs = seth_good_peak_freqs
+    if species != 'Vaclav Human':
+        if species != "Tokay":
+            good_peak_freqs = becky_good_peak_freqs
+        else:
+            good_peak_freqs = seth_good_peak_freqs
     return wf, wf_fn, fs, np.array(good_peak_freqs), np.array(bad_peak_freqs)
 
 
@@ -349,8 +346,10 @@ def get_fn(species, idx):
                     return "TAG6rearSOAEwf1.mat"
                 case 3:
                     return "TAG9rearSOAEwf2.mat"
+        case "Vaclav Human":
+            return 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat'
         case _:
-            raise ValueError("Species must be 'Anole', 'Human', 'Tokay', or 'Owl'!")
+            raise ValueError("Species must be 'Anole', 'Human', 'Tokay', or 'Owl' (or 'Vaclav Human')!")
 
 
 

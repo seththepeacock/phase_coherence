@@ -9,7 +9,7 @@ import phaseco as pc
 for hop_s in [0.01]:
     for pw in [True]:
         print(f"Calculating hop={hop_s}s")
-        for species in ["Human"]:
+        for species in ["Vaclav Human"]:
             # Initialize list for row dicts for xlsx file
             rows = []
             for wf_idx in [0]:
@@ -27,12 +27,14 @@ for hop_s in [0.01]:
                     wf_len_s=wf_len_s,
                 )
 
+                wf_len_s = round(len(wf)/fs)
+
                 "PARAMETERS"
                 # WF pre-processing parameters
                 
 
                 # Coherence Parameters
-                win_meth = {"method": "rho", "rho": 0.7, "snapping_rhortle": 0}
+                win_meth = {"method": "zeta", "zeta": 0.01, "win_type":"hann"}
                 tau_s = 2**13 / 44100  # Everyone uses the same tau_s
                 tau = round(
                     tau_s * fs
@@ -46,7 +48,7 @@ for hop_s in [0.01]:
                 # Output options
                 output_colossogram = 1
                 output_peak_picks = 0
-                output_fits = 0
+                output_fits = 1
                 output_bad_fits = 0
                 output_spreadsheet = 0
                 show_plots = 1
@@ -78,10 +80,10 @@ for hop_s in [0.01]:
                 # Species specific params
 
                 # Maximum xi value
-                xi_max_ss = {"Anole": 0.1, "Owl": 0.1, "Human": 0.5, "Tokay": 0.1}
+                xi_max_ss = {"Anole": 0.1, "Owl": 0.1, "Human": 0.5, "Vaclav Human": 0.2, "Tokay": 0.1}
 
                 # Maximum frequency to plot (in khz)
-                max_khzs = {"Anole": 6, "Tokay": 6, "Human": 10, "Owl": 12}
+                max_khzs = {"Anole": 6, "Tokay": 6, "Human": 10, "Vaclav Human": 10, "Owl": 12}
 
                 # This determines where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi]
                 decay_start_limit_xi_ss = {
@@ -89,40 +91,18 @@ for hop_s in [0.01]:
                     "Tokay": 0.02,
                     "Owl": 0.02,
                     "Human": 0.2,
+                    "Vaclav Human": 0.2,
                 }
 
-                # Decay Star Method
-                # This is how many standard deviations away from the mean to set the noise floor
-                noise_floor_bw_factors = {
-                    "Anole": 0.5,
-                    "Tokay": 0.5,
-                    "Owl": 0,
-                    "Human": 2,
-                }
-
-                # The derivative is very negative at first, and then at some point it flattens out -- this is the point at which it's flattened out enough that we stop the fit
-                ddx_threshes = {"Anole": -3, "Tokay": -3, "Owl": -3, "Human": -1}
-
-                ddx_threshes_num_cycles = {
-                    "Anole": -0.001,
-                    "Tokay": -0.001,
-                    "Owl": -0.0005,
-                    "Human": -0.00005,
-                }
 
                 # Get species-specific params
 
-                # decay_start_limit_xi_s = decay_start_limit_xi_ss[species]
+                decay_start_limit_xi_s = decay_start_limit_xi_ss[species]
                 # TEST
-                decay_start_limit_xi_s = None
+                # decay_start_limit_xi_s = None
                 max_khz = max_khzs[species]
                 xi_max_s = xi_max_ss[species]
-                noise_floor_bw_factor = noise_floor_bw_factors[species]
-                ddx_thresh = (
-                    ddx_threshes_num_cycles[species]
-                    if ddx_thresh_in_num_cycles
-                    else ddx_threshes[species]
-                )
+
 
                 global_xi_max_s = max(xi_max_ss.values()) if const_N_pd else None
 
@@ -166,6 +146,12 @@ for hop_s in [0.01]:
                 N_pd_min = colossogram_dict["N_pd_min"]
                 N_pd_max = colossogram_dict["N_pd_max"]
                 hop = colossogram_dict["hop"]
+                try:
+                    method_id = colossogram_dict['method_id']
+                except:
+                    N_pd_str = get_N_pd_str(const_N_pd, N_pd_min, N_pd_max)
+                    method_id = rf'[{win_meth_str}]   [$\tau$={tau_s*1000:.2f}ms]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [Hop={(hop / fs)*1000:.0f}ms]   [{N_pd_str}]'
+                    
 
                 # Handle transpose from old way
                 if colossogram.shape[0] != xis_s.shape[0]:
@@ -189,15 +175,7 @@ for hop_s in [0.01]:
                 os.makedirs(N_xi_folder + r"Additional Figures/", exist_ok=True)
 
                 "Plots"
-                if const_N_pd:
-                    if N_pd_min != N_pd_max:
-                        raise Exception(
-                            "If N_pd is constant, then N_pd_min and N_pd_max should be equal..."
-                        )
-                    N_pd_str = rf"$N_{{pd}}={N_pd_min}$"
-                else:
-                    N_pd_str = rf"$N_{{pd}} \in [{N_pd_min}, {N_pd_max}]$"
-                suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{win_meth_str}]   [$\tau$={tau_s*1000:.2f}ms]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [Hop = {(hop / fs)*1000:.0f}ms]   [{wf_len_s}s WF]   [{N_pd_str}]"
+                suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{wf_len_s}s WF]   {method_id}"
 
                 if output_colossogram:
                     print("Plotting Colossogram")
@@ -272,7 +250,7 @@ for hop_s in [0.01]:
                 if output_fits:
                     print(rf"Fitting {wf_fn}")
                     # Get becky's dataframe
-                    if species != "Tokay":
+                    if species not in ["Tokay", "Vaclav Human"]:
                         df = get_spreadsheet_df(wf_fn, species)
 
                     p0 = [1, 0.5]
@@ -350,7 +328,7 @@ for hop_s in [0.01]:
                                     "Decayed Xi": xis_s[decayed_idx],
                                     "Decayed Num Cycles":xis_s[decayed_idx] * f0_exact
                                 }
-                                if species != "Tokay":
+                                if species not in ["Tokay", "Vaclav Human"]:
                                     SNRfit, fwhm = get_params_from_df(df, f0)
                                     row["SNRfit"], row["FWHM"] = SNRfit, fwhm
                                 rows.append(row)

@@ -6,42 +6,38 @@ from phaseco import *
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences
 
-for species in ['Tokay']:
-    for wf_idx in [0, 1, 2, 3]:
+for species in ['Vaclav Human']:
+    for wf_idx in [0]:
         print(f"Processing {species} {wf_idx}")
         
         "Get waveform"
         wf, wf_fn, fs, peak_guesses, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
-        
-        plot = 1
-        
-        # Apply a high pass filter
-        hpf_cutoff_freq = 300
-        wf = spectral_filter(wf, fs, hpf_cutoff_freq, type='hp')
-        
-        # Crop to desired length
-        wf_length = 30                
-        wf = crop_wf(wf, fs, wf_length, species)
-        
+        wf_length = len(wf) / fs
+
         "PARAMETERS"
-        tau = 2**13 / 44100 # Everyone uses the same tau
-        tauS = int(tau*fs)
+        plot = 1
+        tau_s = 2**13 / 44100 # Everyone uses the same tau_s
+        tau = round(tau_s*fs)
         
         max_khzs = {
                         'Anole': 6,
                         'Tokay': 6,
                         'Human': 10,
+                        'Vaclav Human': 10,
                         'Owl': 12
                     }
                     
         max_khz = max_khzs[species]
         # Get peak bin indices
         fig_folder = r'N_xi Fits/Auto Peak Picks'
-        fn_id = rf"{species} {wf_idx}, tau={tau*1000:.0f}ms, wf_length={wf_length}s"
-        f, psd = welch(wf=wf, fs=fs, tauS=tauS)
+        fn_id = rf"{species} {wf_idx}, $\tau={tau_s*1000:.0f}$ms, wf_length={wf_length:.3f}s"
+        f, psd = pc.get_welch(wf=wf, fs=fs, tau=tau)
         
         # Guesses
         match wf_fn:
+            # Vaclav Human
+            case 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat':
+                peak_guesses = [1075, 1276, 1367, 2180]
             # Anoles
             case 'AC6rearSOAEwfB1.mat': #0
                 peak_guesses = [1232, 2153, 3710, 4501]
