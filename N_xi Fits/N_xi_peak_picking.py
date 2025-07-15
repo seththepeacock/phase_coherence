@@ -6,7 +6,7 @@ from phaseco import *
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences
 
-for species in ['Vaclav Human']:
+for species in ['V Sim Human']:
     for wf_idx in [0]:
         print(f"Processing {species} {wf_idx}")
         
@@ -23,7 +23,7 @@ for species in ['Vaclav Human']:
                         'Anole': 6,
                         'Tokay': 6,
                         'Human': 10,
-                        'Vaclav Human': 10,
+                        'V Sim Human': 10,
                         'Owl': 12
                     }
                     
@@ -35,9 +35,9 @@ for species in ['Vaclav Human']:
         
         # Guesses
         match wf_fn:
-            # Vaclav Human
+            # V Sim Human
             case 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat':
-                peak_guesses = [1075, 1276, 1367, 2180]
+                peak_guesses = [1156, 1246, 1519, 1975]
             # Anoles
             case 'AC6rearSOAEwfB1.mat': #0
                 peak_guesses = [1232, 2153, 3710, 4501]

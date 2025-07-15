@@ -6,35 +6,33 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import phaseco as pc
 
-for hop_s in [0.01]:
-    for pw in [True]:
-        print(f"Calculating hop={hop_s}s")
-        for species in ["Vaclav Human"]:
-            # Initialize list for row dicts for xlsx file
-            rows = []
-            for wf_idx in [0]:
-                "Get/preprocess waveform"
-                # High pass filter cutoff freq, transition band width, and max allowed ripple (in dB)
-                hpf = {"type": "kaiser", "cf": 300, "df": 50, "rip": 100} 
-                # Will crop waveform to this length (in seconds)
-                wf_len_s = 60  
+
+for pw in [True]:
+    for win_meth in [{"method": "zeta", "zeta": 0.01, "win_type":'hann'}]:
+    # for win_meth in [{"method":"rho", 'rho':0.7}]:
+        # Initialize list for row dicts for xlsx file
+        rows = []
+        for wf_idx in range(4):
+            for species in ['V Sim Human', 'Human', 'Owl', 'Anole', 'Tokay']:            
+                if species == 'V Sim Human' and wf_idx != 0:
+                    continue
                 
+                "Get waveform"
                 wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(
                     species=species,
                     wf_idx=wf_idx,
-                    scale=True,
-                    hpf=hpf,
-                    wf_len_s=wf_len_s,
                 )
-
-                wf_len_s = round(len(wf)/fs)
 
                 "PARAMETERS"
                 # WF pre-processing parameters
-                
+
+                hpf = {"type": "kaiser", "cf": 300, "df": 50, "rip": 100} # High pass filter cutoff freq, transition band width, and max allowed ripple (in dB)
+                wf_len_s = 60 # Will crop waveform to this length (in seconds)
+                scale=True # Scale the waveform (only actually scales if we know the right scaling constant, which is only Anoles and Humans)
+            
 
                 # Coherence Parameters
-                win_meth = {"method": "zeta", "zeta": 0.01, "win_type":"hann"}
+                hop_s=0.01
                 tau_s = 2**13 / 44100  # Everyone uses the same tau_s
                 tau = round(
                     tau_s * fs
@@ -47,15 +45,16 @@ for hop_s in [0.01]:
 
                 # Output options
                 output_colossogram = 1
-                output_peak_picks = 0
+                output_peak_picks = 1
                 output_fits = 1
-                output_bad_fits = 0
-                output_spreadsheet = 0
-                show_plots = 1
+                output_bad_fits = 1
+                output_spreadsheet = 1
+                show_plots = 0
 
                 # Fitting Parameters
                 trim_step = 1
                 A_max = np.inf  # 1 or np.inf
+                A_const_one = False # Fixes the amplitude of the decay at 1
                 sigma_weighting_power = (
                     0  # > 0 means less weight on lower coherence bins in fit
                 )
@@ -80,28 +79,38 @@ for hop_s in [0.01]:
                 # Species specific params
 
                 # Maximum xi value
-                xi_max_ss = {"Anole": 0.1, "Owl": 0.1, "Human": 0.5, "Vaclav Human": 0.2, "Tokay": 0.1}
+                xi_max_ss = {"Anole": 0.1, "Owl": 0.1, "Human": 0.5, "V Sim Human": 0.2, "Tokay": 0.1}
 
                 # Maximum frequency to plot (in khz)
-                max_khzs = {"Anole": 6, "Tokay": 6, "Human": 10, "Vaclav Human": 10, "Owl": 12}
+                max_khzs = {"Anole": 6, "Tokay": 6, "Human": 10, "V Sim Human": 10, "Owl": 12}
 
-                # This determines where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi]
-                decay_start_limit_xi_ss = {
-                    "Anole": 0.02,
-                    "Tokay": 0.02,
-                    "Owl": 0.02,
-                    "Human": 0.2,
-                    "Vaclav Human": 0.2,
+                # # This determines where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi]
+                # decay_start_limit_xi_ss = {
+                #     "Anole": 0.02,
+                #     "Tokay": 0.02,
+                #     "Owl": 0.02,
+                #     "Human": 0.2,
+                #     "V Sim Human": 0.2,
+                # }
+
+                # The coherence "noise floor" at a given xi is defined as the mean over all bins + this factor * std deviation over all bins
+                    # Fits are ended when the decay hits the noise floor, so smaller noise_floor_bw_factor = longer fit
+                noise_floor_bw_factors = {
+                    "Anole": 1,
+                    "Tokay": 1,
+                    "Owl": 0.1,
+                    "Human": 1,
+                    "V Sim Human": 1,
                 }
 
 
                 # Get species-specific params
 
-                decay_start_limit_xi_s = decay_start_limit_xi_ss[species]
-                # TEST
-                # decay_start_limit_xi_s = None
+                # decay_start_limit_xi_s = decay_start_limit_xi_ss[species]
+                decay_start_limit_xi_s = None # Defaults to 25% of the waveform
                 max_khz = max_khzs[species]
                 xi_max_s = xi_max_ss[species]
+                noise_floor_bw_factor = noise_floor_bw_factors[species]
 
 
                 global_xi_max_s = max(xi_max_ss.values()) if const_N_pd else None
@@ -134,6 +143,7 @@ for hop_s in [0.01]:
                     win_meth,
                     force_recalc_colossogram,
                     const_N_pd,
+                    scale
                 )
 
                 # Load everything that wasn't explicitly "saved" in the filename
@@ -146,12 +156,13 @@ for hop_s in [0.01]:
                 N_pd_min = colossogram_dict["N_pd_min"]
                 N_pd_max = colossogram_dict["N_pd_max"]
                 hop = colossogram_dict["hop"]
+
                 try:
                     method_id = colossogram_dict['method_id']
                 except:
                     N_pd_str = get_N_pd_str(const_N_pd, N_pd_min, N_pd_max)
                     method_id = rf'[{win_meth_str}]   [$\tau$={tau_s*1000:.2f}ms]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [Hop={(hop / fs)*1000:.0f}ms]   [{N_pd_str}]'
-                    
+            
 
                 # Handle transpose from old way
                 if colossogram.shape[0] != xis_s.shape[0]:
@@ -167,9 +178,9 @@ for hop_s in [0.01]:
 
                 "Make more directories"
                 results_folder = (
-                    N_xi_folder + rf"Results/Results ({win_meth_str}, PW={pw})/"
+                    N_xi_folder + rf"Results/Results ({win_meth_str}, PW={pw})"
                 )
-                all_results_folder = N_xi_folder + rf"Results/Results (All)/"
+                all_results_folder = N_xi_folder + rf"Results/Results (All)"
                 os.makedirs(results_folder, exist_ok=True)
                 os.makedirs(all_results_folder, exist_ok=True)
                 os.makedirs(N_xi_folder + r"Additional Figures/", exist_ok=True)
@@ -201,9 +212,9 @@ for hop_s in [0.01]:
                     plt.title(f"Colossogram", fontsize=18)
                     plt.suptitle(suptitle, fontsize=10)
                     for folder in [results_folder, all_results_folder]:
-                        os.makedirs(rf"{folder}\Colossograms", exist_ok=True)
+                        os.makedirs(rf"{folder}/Colossograms", exist_ok=True)
                         plt.savefig(
-                            rf"{folder}\Colossograms\{fn_id} (Colossogram).png", dpi=300
+                            rf"{folder}/Colossograms/{fn_id} (Colossogram).png", dpi=300
                         )
                     if show_plots:
                         plt.show()
@@ -212,7 +223,7 @@ for hop_s in [0.01]:
                     print("Plotting Peak Picks")
                     target_xi = 0.01
                     xi_idx = np.argmin(np.abs(xis_s - target_xi))
-                    coherence_slice = colossogram[:, xi_idx]
+                    coherence_slice = colossogram[xi_idx, :]
                     psd = get_welch(wf=wf, fs=fs, tau=tau)[1]
                     plt.close("all")
                     plt.figure(figsize=(11, 8))
@@ -239,8 +250,9 @@ for hop_s in [0.01]:
                     plt.legend()
                     plt.xlim(0, max_khz)
                     plt.tight_layout()
+                    os.makedirs(f'{results_folder}/Peak Picks/', exist_ok=True)
                     plt.savefig(
-                        rf"{results_folder}\Peak Picks\{fn_id} (Peak Picks).png",
+                        rf"{results_folder}/Peak Picks/{fn_id} (Peak Picks).png",
                         dpi=300,
                     )
                     if show_plots:
@@ -250,7 +262,7 @@ for hop_s in [0.01]:
                 if output_fits:
                     print(rf"Fitting {wf_fn}")
                     # Get becky's dataframe
-                    if species not in ["Tokay", "Vaclav Human"]:
+                    if species not in ["Tokay", "V Sim Human"]:
                         df = get_spreadsheet_df(wf_fn, species)
 
                     p0 = [1, 0.5]
@@ -292,6 +304,8 @@ for hop_s in [0.01]:
                                 decay_start_limit_xi_s,
                                 sigma_power=sigma_weighting_power,
                                 A_max=A_max,
+                                A_const_one=A_const_one,
+                                noise_floor_bw_factor=noise_floor_bw_factor
                             )
 
                             # Unpack dictionary
@@ -328,7 +342,7 @@ for hop_s in [0.01]:
                                     "Decayed Xi": xis_s[decayed_idx],
                                     "Decayed Num Cycles":xis_s[decayed_idx] * f0_exact
                                 }
-                                if species not in ["Tokay", "Vaclav Human"]:
+                                if species not in ["Tokay", "V Sim Human"]:
                                     SNRfit, fwhm = get_params_from_df(df, f0)
                                     row["SNRfit"], row["FWHM"] = SNRfit, fwhm
                                 rows.append(row)
@@ -339,9 +353,9 @@ for hop_s in [0.01]:
                         # fits_folder = f'{fig_folder}' if good_peaks else 'Additional Figures'
                         fits_str = f"Fits" if good_peaks else "Bad Fits"
                         for folder in [results_folder, all_results_folder]:
-                            os.makedirs(rf"{folder}\{fits_str}", exist_ok=True)
+                            os.makedirs(rf"{folder}/{fits_str}", exist_ok=True)
                             plt.savefig(
-                                rf"{folder}\{fits_str}\{fn_id} ({fits_str}).png",
+                                rf"{folder}/{fits_str}/{fn_id} ({fits_str}).png",
                                 dpi=300,
                             )
                         if show_plots:
@@ -351,8 +365,8 @@ for hop_s in [0.01]:
             # Save parameter data as xlsx
             df_fitted_params = pd.DataFrame(rows)
             N_xi_fitted_parameters_fn = (
-                rf"{results_folder}\N_xi Fitted Parameters ({win_meth_str}, PW={pw})"
+                rf"{results_folder}/N_xi Fitted Parameters ({win_meth_str}, PW={pw})"
             )
             df_fitted_params.to_excel(rf"{N_xi_fitted_parameters_fn}.xlsx", index=False)
 
-        print("Done!")
+    print("Done!")

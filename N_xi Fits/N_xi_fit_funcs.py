@@ -32,6 +32,7 @@ def load_calc_colossogram(
     win_meth,
     force_recalc_colossogram,
     const_N_pd,
+    scale
 ):
     # Define these, otherwise the old way loading will be mad
     snapping_rhortle = np.nan
@@ -109,6 +110,25 @@ def load_calc_colossogram(
             }
         else:
             # Now, we know they don't exist as pickles new or old, so we recalculate
+
+            # First, process the wf
+            if species in ["Anole", "Human"] and scale: # Scale wf
+                wf = scale_wf(wf)
+
+            # Crop wf
+            wf = crop_wf(wf, fs, wf_len_s)
+
+            # Apply HPF
+            if hpf is not None and species != 'V Sim Human':
+                match hpf["type"]:
+                    case "spectral":
+                        wf = spectral_filter(wf, fs, hpf["cf"], type="hp")
+                    case "kaiser":
+                        wf = kaiser_filter(wf, fs, hpf["cf"], hpf["df"], hpf["rip"])
+                    case _:
+                        raise ValueError(f"{hpf['type']} is not a valid HPF type!")
+            
+            # Then get colossogram!
             colossogram_dict = get_colossogram(
                 wf,
                 fs,
@@ -163,7 +183,7 @@ def scale_wf(wf):
     return wf * factor
 
 
-def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=None):
+def get_wf(wf_fn=None, species=None, wf_idx=None):
     if wf_fn is None:
         if species is None or wf_idx is None:
             raise ValueError("You must input either fn or species and idx!")
@@ -175,7 +195,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
     data_folder = N_xi_folder + r"Data/"
     if species == "Tokay":
         wf = sio.loadmat(data_folder + wf_fn)["wf"][0]
-    elif species == 'Vaclav Human':
+    elif species == 'V Sim Human':
         wf = sio.loadmat(data_folder + wf_fn)['oae'][:, 0]
     else:
         wf = sio.loadmat(data_folder + wf_fn)["wf"][:, 0]
@@ -183,105 +203,88 @@ def get_wf(wf_fn=None, species=None, wf_idx=None, scale=True, wf_len_s=60, hpf=N
     # Get fs
     if wf_fn in ["Owl2R1.mat", "Owl7L1.mat"]:
         fs = 48000
+    elif species=='V Sim Human':
+        fs = 40000
     else:
         fs = 44100
 
-    # Scale wf
-    if species in ["Anole", "Human"] and scale:
-        wf = scale_wf(wf)
-
-    if species != 'Vaclav Human':
-        # Crop wf
-        wf = crop_wf(wf, fs, wf_len_s)
-
-        # Apply HPF
-        if hpf is not None and species:
-            match hpf["type"]:
-                case "spectral":
-                    wf = spectral_filter(wf, fs, hpf["cf"], type="hp")
-                case "kaiser":
-                    wf = kaiser_filter(wf, fs, hpf["cf"], hpf["df"], hpf["rip"])
-                case _:
-                    raise ValueError(f"{hpf['type']} is not a valid HPF type!")
 
     # Get peak list
     match wf_fn:
         # Vaclav's Human
         case 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat':
-            good_peak_freqs = [1077, 1276, 1367, 2180]
+            good_peak_freqs = [1157, 1244, 1518, 1976]
             bad_peak_freqs = []
         # Anoles
         case "AC6rearSOAEwfB1.mat":  # 0
             seth_good_peak_freqs = [1233, 2164, 3714, 4500]
             becky_good_peak_freqs = [1233, 2164, 3709, 4506]
-            bad_peak_freqs = []
+            becky_bad_peak_freqs = []
         case "ACsb4rearSOAEwf1.mat":  # 1
             seth_good_peak_freqs = [964, 3031, 3160, 3957]
             becky_good_peak_freqs = [964, 3025, 3155, 3951]
-            bad_peak_freqs = []
+            becky_bad_peak_freqs = []
         case "ACsb24rearSOAEwfA1.mat":  # 2
             seth_good_peak_freqs = [1809, 2169, 3112, 3478]
             becky_good_peak_freqs = [2175, 2503, 3112, 3478]
-            bad_peak_freqs = [1728, 1814]
+            becky_bad_peak_freqs = [1728, 1814]
         case "ACsb30learSOAEwfA2.mat":  # 3
             seth_good_peak_freqs = [1803, 2137, 2406, 2778]
             becky_good_peak_freqs = [1798, 2143, 2406, 2778]
-            bad_peak_freqs = []
+            becky_bad_peak_freqs = []
 
         # Tokays
         case "tokay_GG1rearSOAEwf.mat":  # 0
-            seth_good_peak_freqs = [1184, 1572, 3214, 3714]
+            good_peak_freqs = [1184, 1572, 3214, 3714]
             bad_peak_freqs = []
         case "tokay_GG2rearSOAEwf.mat":  # 1
-            seth_good_peak_freqs = [1195, 1567, 3176, 3876]
+            good_peak_freqs = [1195, 1567, 3176, 3876]
             bad_peak_freqs = []
         case "tokay_GG3rearSOAEwf.mat":  # 2
-            seth_good_peak_freqs = [1109, 1620, 2266, 3133]
+            good_peak_freqs = [1109, 1620, 2266, 3133]
             bad_peak_freqs = []
         case "tokay_GG4rearSOAEwf.mat":  # 3
-            seth_good_peak_freqs = [1104, 2288, 2837, 3160]
+            good_peak_freqs = [1104, 2288, 2837, 3160]
             bad_peak_freqs = []
 
         # Owls
         case "Owl2R1.mat":  # 0
             seth_good_peak_freqs = [4355, 7451, 8458, 9039]
             becky_good_peak_freqs = [5953, 7090, 7453, 8016]
-            bad_peak_freqs = [4342, 5578, 8450, 9035, 9574]
+            becky_bad_peak_freqs = [4342, 5578, 8450, 9035, 9574]
         case "Owl7L1.mat":  # 1
             seth_good_peak_freqs = [6896, 7941, 8861, 9271]
             becky_good_peak_freqs = [7535, 7922, 8426, 9779]
-            bad_peak_freqs = [6164, 6896, 8854, 9252]
+            becky_bad_peak_freqs = [6164, 6896, 8854, 9252]
         case "TAG6rearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [5626, 8096, 8484, 9862]
             becky_good_peak_freqs = [5626, 6029, 8102, 9857]
-            bad_peak_freqs = [8489]
+            becky_bad_peak_freqs = [8489]
         case "TAG9rearSOAEwf2.mat":  # 3
             seth_good_peak_freqs = [4931, 6993, 7450, 9878]
             becky_good_peak_freqs = [3461, 6977, 9846, 10270]
-            bad_peak_freqs = [4613, 4920, 6164, 7445]
+            becky_bad_peak_freqs = [4613, 4920, 6164, 7445]
 
         # Humans
         case "ALrearSOAEwf1.mat":  # 0
             seth_good_peak_freqs = [2665, 2945, 3219, 3865]
             becky_good_peak_freqs = [2805, 2945, 3865]
-            bad_peak_freqs = [904, 980, 2659, 3219]
+            becky_bad_peak_freqs = [904, 980, 2659, 3219]
         case "JIrearSOAEwf2.mat":  # 1
             seth_good_peak_freqs = [2342, 3402, 8312, 8678]
             becky_good_peak_freqs = [2342, 3402, 4048, 5841]
-            bad_peak_freqs = [8312, 8678]
+            becky_bad_peak_freqs = [8312, 8678]
         case "LSrearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [732, 985, 1637, 2229]
             becky_good_peak_freqs = [732, 985, 2230]
-            bad_peak_freqs = [1637, 3122]
+            becky_bad_peak_freqs = [1637, 3122]
         case "TH13RearwaveformSOAE.mat":  # 3
             seth_good_peak_freqs = [904, 1518, 2040, 2697]
             becky_good_peak_freqs = [904, 1518, 2040, 2697]
-            bad_peak_freqs = []
-    if species != 'Vaclav Human':
-        if species != "Tokay":
-            good_peak_freqs = becky_good_peak_freqs
-        else:
-            good_peak_freqs = seth_good_peak_freqs
+            becky_bad_peak_freqs = []
+    if species not in ['V Sim Human', 'Tokay']:
+        good_peak_freqs = becky_good_peak_freqs
+        bad_peak_freqs = becky_bad_peak_freqs
     return wf, wf_fn, fs, np.array(good_peak_freqs), np.array(bad_peak_freqs)
 
 
@@ -346,10 +349,10 @@ def get_fn(species, idx):
                     return "TAG6rearSOAEwf1.mat"
                 case 3:
                     return "TAG9rearSOAEwf2.mat"
-        case "Vaclav Human":
+        case "V Sim Human":
             return 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat'
         case _:
-            raise ValueError("Species must be 'Anole', 'Human', 'Tokay', or 'Owl' (or 'Vaclav Human')!")
+            raise ValueError("Species must be 'Anole', 'Human', 'Tokay', or 'Owl' (or 'V Sim Human')!")
 
 
 
