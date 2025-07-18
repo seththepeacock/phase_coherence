@@ -31,6 +31,8 @@ def load_calc_colossogram(
     hop,
     win_meth,
     force_recalc_colossogram,
+    plot_what_we_got,
+    only_calc_new_coherences,
     const_N_pd,
     scale
 ):
@@ -57,11 +59,13 @@ def load_calc_colossogram(
     pkl_fn = f"{fn_id} (Colossogram)"
 
     # Get colossogram if they exist (in the new way)
-    pkl_folder = N_xi_folder + r"Pickles/"
+    pkl_folder = N_xi_folder + "Pickles/"
     os.makedirs(pkl_folder, exist_ok=True)
     if os.path.exists(pkl_folder + pkl_fn + ".pkl") and not force_recalc_colossogram:
         with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
             (colossogram_dict) = pickle.load(file)
+        if only_calc_new_coherences:
+            colossogram_dict['only_calc_new_coherences'] = 1
 
     # Then, try to load in the old way
     else:
@@ -108,9 +112,12 @@ def load_calc_colossogram(
                 "win_meth_str": win_meth_str,
                 "hpf_str": hpf_str,
             }
+            if only_calc_new_coherences:
+                colossogram_dict['only_calc_new_coherences'] = 1
         else:
             # Now, we know they don't exist as pickles new or old, so we recalculate
-
+            if plot_what_we_got: # Unless plot_what we got, in which case we just end the func here
+                return {'plot_what_we_got':1}
             # First, process the wf
             if species in ["Anole", "Human"] and scale: # Scale wf
                 wf = scale_wf(wf)
@@ -230,40 +237,40 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             becky_bad_peak_freqs = [1728, 1814]
         case "ACsb30learSOAEwfA2.mat":  # 3
             seth_good_peak_freqs = [1803, 2137, 2406, 2778]
-            becky_good_peak_freqs = [1798, 2143, 2406, 2778]
-            becky_bad_peak_freqs = []
+            becky_good_peak_freqs = [1798, ]
+            becky_bad_peak_freqs = [2143, 2406, 2778]
 
         # Tokays
         case "tokay_GG1rearSOAEwf.mat":  # 0
-            good_peak_freqs = [1184, 1572, 3214, 3714]
-            bad_peak_freqs = []
+            good_peak_freqs = [3214]
+            bad_peak_freqs = [1184, 1572, 3714]
         case "tokay_GG2rearSOAEwf.mat":  # 1
-            good_peak_freqs = [1195, 1567, 3176, 3876]
-            bad_peak_freqs = []
+            good_peak_freqs = [1567, 3176, 3876]
+            bad_peak_freqs = [1195]
         case "tokay_GG3rearSOAEwf.mat":  # 2
-            good_peak_freqs = [1109, 1620, 2266, 3133]
-            bad_peak_freqs = []
+            good_peak_freqs = [1109, 3133]
+            bad_peak_freqs = [1620, 2266]
         case "tokay_GG4rearSOAEwf.mat":  # 3
-            good_peak_freqs = [1104, 2288, 2837, 3160]
-            bad_peak_freqs = []
+            good_peak_freqs = [1104, 2288, 3160]
+            bad_peak_freqs = [2837]
 
         # Owls
         case "Owl2R1.mat":  # 0
             seth_good_peak_freqs = [4355, 7451, 8458, 9039]
-            becky_good_peak_freqs = [5953, 7090, 7453, 8016]
-            becky_bad_peak_freqs = [4342, 5578, 8450, 9035, 9574]
+            becky_good_peak_freqs = [8016, 8450]
+            becky_bad_peak_freqs = [4342, 5578, 5953, 7090, 7453, 9035, 9574]
         case "Owl7L1.mat":  # 1
             seth_good_peak_freqs = [6896, 7941, 8861, 9271]
-            becky_good_peak_freqs = [7535, 7922, 8426, 9779]
-            becky_bad_peak_freqs = [6164, 6896, 8854, 9252]
+            becky_good_peak_freqs = [7922, 7535, 8854]
+            becky_bad_peak_freqs = [6164, 6896, 8426, 9252, 9779]
         case "TAG6rearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [5626, 8096, 8484, 9862]
-            becky_good_peak_freqs = [5626, 6029, 8102, 9857]
-            becky_bad_peak_freqs = [8489]
+            becky_good_peak_freqs = [6029, 8102, 9857]
+            becky_bad_peak_freqs = [5626, 8489]
         case "TAG9rearSOAEwf2.mat":  # 3
             seth_good_peak_freqs = [4931, 6993, 7450, 9878]
-            becky_good_peak_freqs = [3461, 6977, 9846, 10270]
-            becky_bad_peak_freqs = [4613, 4920, 6164, 7445]
+            becky_good_peak_freqs = [6977]
+            becky_bad_peak_freqs = [3461, 4613, 4920, 6164, 7445, 9846, 10270]
 
         # Humans
         case "ALrearSOAEwf1.mat":  # 0
@@ -272,8 +279,8 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             becky_bad_peak_freqs = [904, 980, 2659, 3219]
         case "JIrearSOAEwf2.mat":  # 1
             seth_good_peak_freqs = [2342, 3402, 8312, 8678]
-            becky_good_peak_freqs = [2342, 3402, 4048, 5841]
-            becky_bad_peak_freqs = [8312, 8678]
+            becky_good_peak_freqs = [2342, 4048, 5841]
+            becky_bad_peak_freqs = [3402, 8312, 8678]
         case "LSrearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [732, 985, 1637, 2229]
             becky_good_peak_freqs = [732, 985, 2230]

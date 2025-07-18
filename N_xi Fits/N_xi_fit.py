@@ -6,17 +6,22 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import phaseco as pc
 
+all_species = ["Anole", "Tokay", "Owl", "Human", "V Sim Human"]
 
-for pw in [True]:
-    for win_meth in [{"method": "zeta", "zeta": 0.01, "win_type":'hann'}]:
-    # for win_meth in [{"method":"rho", 'rho':0.7}]:
+for win_meth in [
+    {"method": "zeta", "zeta": 0.01, "win_type": "hann"},
+    # {"method": "rho", "rho": 0.7},
+    # {"method": "zeta", "zeta": 0.01, "win_type": "boxcar"},
+    # {"method": "static", "win_type": "hann"},
+]:
+    for pw in [True, False]:
         # Initialize list for row dicts for xlsx file
         rows = []
-        for wf_idx in range(4):
-            for species in ['V Sim Human', 'Human', 'Owl', 'Anole', 'Tokay']:            
-                if species == 'V Sim Human' and wf_idx != 0:
+        for species in all_species:
+            for wf_idx in range(1):
+                if species == "V Sim Human" and wf_idx != 0:
                     continue
-                
+
                 "Get waveform"
                 wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(
                     species=species,
@@ -26,13 +31,17 @@ for pw in [True]:
                 "PARAMETERS"
                 # WF pre-processing parameters
 
-                hpf = {"type": "kaiser", "cf": 300, "df": 50, "rip": 100} # High pass filter cutoff freq, transition band width, and max allowed ripple (in dB)
-                wf_len_s = 60 # Will crop waveform to this length (in seconds)
-                scale=True # Scale the waveform (only actually scales if we know the right scaling constant, which is only Anoles and Humans)
-            
+                hpf = {
+                    "type": "kaiser",
+                    "cf": 300,
+                    "df": 50,
+                    "rip": 100,
+                }  # High pass filter cutoff freq, transition band width, and max allowed ripple (in dB)
+                wf_len_s = 60  # Will crop waveform to this length (in seconds)
+                scale = True  # Scale the waveform (only actually scales if we know the right scaling constant, which is only Anoles and Humans)
 
                 # Coherence Parameters
-                hop_s=0.01
+                hop_s = 0.01
                 tau_s = 2**13 / 44100  # Everyone uses the same tau_s
                 tau = round(
                     tau_s * fs
@@ -41,6 +50,8 @@ for pw in [True]:
                 delta_xi_s = 0.001
                 hop = round(hop_s * fs)
                 force_recalc_colossogram = 0
+                plot_what_we_got = 0
+                only_calc_new_coherences = 0
                 const_N_pd = 1
 
                 # Output options
@@ -54,11 +65,11 @@ for pw in [True]:
                 # Fitting Parameters
                 trim_step = 1
                 A_max = np.inf  # 1 or np.inf
-                A_const_one = False # Fixes the amplitude of the decay at 1
+                A_const = False  # Fixes the amplitude of the decay at 1
                 sigma_weighting_power = (
-                    0  # > 0 means less weight on lower coherence bins in fit
+                    0  # < 0 -> less weight on lower coherence part of fit
                 )
-                ddx_thresh_in_num_cycles = True
+                bootstrap_fits = False # Bootstraps 1000 times from the decay
 
                 # Plotting parameters
                 fits_noise_bin = None
@@ -74,15 +85,26 @@ for pw in [True]:
                     "#bcbd22",
                     "#126290",
                 ]
-                
 
                 # Species specific params
 
                 # Maximum xi value
-                xi_max_ss = {"Anole": 0.1, "Owl": 0.1, "Human": 0.5, "V Sim Human": 0.2, "Tokay": 0.1}
+                xi_max_ss = {
+                    "Anole": 0.1,
+                    "Owl": 0.1,
+                    "Human": 0.5,
+                    "V Sim Human": 0.2,
+                    "Tokay": 0.1,
+                }
 
                 # Maximum frequency to plot (in khz)
-                max_khzs = {"Anole": 6, "Tokay": 6, "Human": 10, "V Sim Human": 10, "Owl": 12}
+                max_khzs = {
+                    "Anole": 6,
+                    "Tokay": 6,
+                    "Human": 10,
+                    "V Sim Human": 10,
+                    "Owl": 12,
+                }
 
                 # # This determines where to start the fit as the latest peak in the range defined by xi=[0, decay_start_max_xi]
                 # decay_start_limit_xi_ss = {
@@ -94,7 +116,7 @@ for pw in [True]:
                 # }
 
                 # The coherence "noise floor" at a given xi is defined as the mean over all bins + this factor * std deviation over all bins
-                    # Fits are ended when the decay hits the noise floor, so smaller noise_floor_bw_factor = longer fit
+                # Fits are ended when the decay hits the noise floor, so smaller noise_floor_bw_factor = longer fit
                 noise_floor_bw_factors = {
                     "Anole": 1,
                     "Tokay": 1,
@@ -103,17 +125,21 @@ for pw in [True]:
                     "V Sim Human": 1,
                 }
 
-
                 # Get species-specific params
 
                 # decay_start_limit_xi_s = decay_start_limit_xi_ss[species]
-                decay_start_limit_xi_s = None # Defaults to 25% of the waveform
+                decay_start_limit_xi_s = None  # Defaults to 25% of the waveform
                 max_khz = max_khzs[species]
                 xi_max_s = xi_max_ss[species]
+                delta_xi = 0.01
                 noise_floor_bw_factor = noise_floor_bw_factors[species]
-
-
                 global_xi_max_s = max(xi_max_ss.values()) if const_N_pd else None
+
+                # Redefine these for this run
+                xi_min_s = 0.01
+                delta_xi_s = 0.01
+                xi_max_s = 5.0
+                global_xi_max_s = 5.0
 
                 # Raise warning if tau is not a power of two AND the samplerate is indeed 44100
                 if np.log2(tau) != int(np.log2(tau)) and fs == 44100:
@@ -142,10 +168,17 @@ for pw in [True]:
                     hop,
                     win_meth,
                     force_recalc_colossogram,
+                    plot_what_we_got,
+                    only_calc_new_coherences,
                     const_N_pd,
-                    scale
+                    scale,
                 )
-
+                if "plot_what_we_got" in colossogram_dict.keys():
+                    print("NO PICKLE, SKIPPING")
+                    continue
+                if "only_calc_new_coherences" in colossogram_dict.keys():
+                    print("ALREADY CALCULATED, SKIPPING")
+                    continue
                 # Load everything that wasn't explicitly "saved" in the filename
                 colossogram = colossogram_dict["colossogram"]
                 fn_id = colossogram_dict["fn_id"]
@@ -158,11 +191,10 @@ for pw in [True]:
                 hop = colossogram_dict["hop"]
 
                 try:
-                    method_id = colossogram_dict['method_id']
+                    method_id = colossogram_dict["method_id"]
                 except:
                     N_pd_str = get_N_pd_str(const_N_pd, N_pd_min, N_pd_max)
-                    method_id = rf'[{win_meth_str}]   [$\tau$={tau_s*1000:.2f}ms]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [Hop={(hop / fs)*1000:.0f}ms]   [{N_pd_str}]'
-            
+                    method_id = rf"[{win_meth_str}]   [$\tau$={tau_s*1000:.2f}ms]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [Hop={(hop / fs)*1000:.0f}ms]   [{N_pd_str}]"
 
                 # Handle transpose from old way
                 if colossogram.shape[0] != xis_s.shape[0]:
@@ -178,7 +210,7 @@ for pw in [True]:
 
                 "Make more directories"
                 results_folder = (
-                    N_xi_folder + rf"Results/Results ({win_meth_str}, PW={pw})"
+                    N_xi_folder + rf"Results/Results (PW={pw}, {win_meth_str})"
                 )
                 all_results_folder = N_xi_folder + rf"Results/Results (All)"
                 os.makedirs(results_folder, exist_ok=True)
@@ -250,7 +282,7 @@ for pw in [True]:
                     plt.legend()
                     plt.xlim(0, max_khz)
                     plt.tight_layout()
-                    os.makedirs(f'{results_folder}/Peak Picks/', exist_ok=True)
+                    os.makedirs(f"{results_folder}/Peak Picks/", exist_ok=True)
                     plt.savefig(
                         rf"{results_folder}/Peak Picks/{fn_id} (Peak Picks).png",
                         dpi=300,
@@ -304,26 +336,26 @@ for pw in [True]:
                                 decay_start_limit_xi_s,
                                 sigma_power=sigma_weighting_power,
                                 A_max=A_max,
-                                A_const_one=A_const_one,
-                                noise_floor_bw_factor=noise_floor_bw_factor
+                                A_const=A_const,
+                                noise_floor_bw_factor=noise_floor_bw_factor,
                             )
 
                             # Unpack dictionary
-                            f0_exact               = N_xi_dict["f0_exact"]
-                            N_xi                   = N_xi_dict["N_xi"]
-                            N_xi_std               = N_xi_dict["N_xi_std"]
-                            T                      = N_xi_dict["T"]
-                            T_std                  = N_xi_dict["T_std"]
-                            A                      = N_xi_dict["A"]
-                            A_std                  = N_xi_dict["A_std"]
-                            mse                    = N_xi_dict["mse"]
-                            decayed_idx            = N_xi_dict["decayed_idx"]
-                            
-                            
+                            f0_exact = N_xi_dict["f0_exact"]
+                            N_xi = N_xi_dict["N_xi"]
+                            N_xi_std = N_xi_dict["N_xi_std"]
+                            T = N_xi_dict["T"]
+                            T_std = N_xi_dict["T_std"]
+                            A = N_xi_dict["A"]
+                            A_std = N_xi_dict["A_std"]
+                            mse = N_xi_dict["mse"]
+                            decayed_idx = N_xi_dict["decayed_idx"]
 
                             # Plot the fit
                             plt.subplot(2, 2, subplot_idx)
                             pc.plot_N_xi_fit(N_xi_dict, color)
+                            # TEST
+                            plt.ylim(0, 0.1)
 
                             # Add params to a row dict
                             if good_peaks and output_spreadsheet:
@@ -340,13 +372,12 @@ for pw in [True]:
                                     "A_std": A_std,
                                     "MSE": mse,
                                     "Decayed Xi": xis_s[decayed_idx],
-                                    "Decayed Num Cycles":xis_s[decayed_idx] * f0_exact
+                                    "Decayed Num Cycles": xis_s[decayed_idx] * f0_exact,
                                 }
                                 if species not in ["Tokay", "V Sim Human"]:
                                     SNRfit, fwhm = get_params_from_df(df, f0)
                                     row["SNRfit"], row["FWHM"] = SNRfit, fwhm
                                 rows.append(row)
-
                         # Book it!
                         plt.tight_layout()
                         os.makedirs(results_folder, exist_ok=True)
@@ -361,7 +392,7 @@ for pw in [True]:
                         if show_plots:
                             plt.show()
 
-        if output_spreadsheet:
+        if output_spreadsheet and not only_calc_new_coherences:
             # Save parameter data as xlsx
             df_fitted_params = pd.DataFrame(rows)
             N_xi_fitted_parameters_fn = (
