@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.linalg import expm, solve_continuous_lyapunov
 import matplotlib.pyplot as plt
-
+from tqdm import tqdm
 def generate_nddho(q, f0, sigma=1, fs=44100, t_max=60):
     """
     Generate a noisy damped driven harmonic oscillator (NDDHO) waveform 
@@ -56,9 +56,10 @@ def generate_nddho(q, f0, sigma=1, fs=44100, t_max=60):
     x = np.zeros(n_samples)
     v = np.zeros(n_samples)
     state = np.random.multivariate_normal(mean=[0, 0], cov=Q_c)
-    
+
+
     # Iterate
-    for i in range(1, n_samples):
+    for i in tqdm(range(1, n_samples), mininterval=1.0):
         eta = np.random.multivariate_normal(mean=[0, 0], cov=Q_kick)
         state = Phi @ state + eta
         x[i], v[i] = state

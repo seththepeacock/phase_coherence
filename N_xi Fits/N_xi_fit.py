@@ -6,19 +6,21 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import phaseco as pc
 
-all_species = ["Anole", "Tokay", "Owl", "Human", "V Sim Human"]
+all_species = ["Human", "Owl", "Anole", "Tokay"]
 
 for win_meth in [
-    {"method": "zeta", "zeta": 0.01, "win_type": "hann"},
-    # {"method": "rho", "rho": 0.7},
+    # {"method": "zeta", "zeta": 0.01, "win_type": "hann"},
+    {"method": "rho", "rho": 0.7},
     # {"method": "zeta", "zeta": 0.01, "win_type": "boxcar"},
     # {"method": "static", "win_type": "hann"},
 ]:
-    for pw in [True, False]:
+    for pw in [True]:
         # Initialize list for row dicts for xlsx file
         rows = []
         for species in all_species:
-            for wf_idx in range(1):
+            for wf_idx in range(5):
+                if wf_idx == 4 and species != "Owl":
+                    continue
                 if species == "V Sim Human" and wf_idx != 0:
                     continue
 
@@ -30,7 +32,6 @@ for win_meth in [
 
                 "PARAMETERS"
                 # WF pre-processing parameters
-
                 hpf = {
                     "type": "kaiser",
                     "cf": 300,
@@ -55,17 +56,20 @@ for win_meth in [
                 const_N_pd = 1
 
                 # Output options
-                output_colossogram = 1
-                output_peak_picks = 1
+                output_colossogram = 0
+                output_peak_picks = 0
                 output_fits = 1
                 output_bad_fits = 1
                 output_spreadsheet = 1
                 show_plots = 0
 
                 # Fitting Parameters
+                mse_thresh = 0.0001 # Decay start is pushed forward xi by xi until MSE thresh falls below this value
                 trim_step = 1
                 A_max = np.inf  # 1 or np.inf
                 A_const = False  # Fixes the amplitude of the decay at 1
+                stop_fit = 'frac' # stops fit when it reaches a fraction of the fit start value
+                stop_fit_frac = 0.1 # aforementioned fraction
                 sigma_weighting_power = (
                     0  # < 0 -> less weight on lower coherence part of fit
                 )
@@ -92,7 +96,7 @@ for win_meth in [
                 xi_max_ss = {
                     "Anole": 0.1,
                     "Owl": 0.1,
-                    "Human": 0.5,
+                    "Human": 1.0,
                     "V Sim Human": 0.2,
                     "Tokay": 0.1,
                 }
@@ -117,13 +121,13 @@ for win_meth in [
 
                 # The coherence "noise floor" at a given xi is defined as the mean over all bins + this factor * std deviation over all bins
                 # Fits are ended when the decay hits the noise floor, so smaller noise_floor_bw_factor = longer fit
-                noise_floor_bw_factors = {
-                    "Anole": 1,
-                    "Tokay": 1,
-                    "Owl": 0.1,
-                    "Human": 1,
-                    "V Sim Human": 1,
-                }
+                # noise_floor_bw_factors = {
+                #     "Anole": 1,
+                #     "Tokay": 1,
+                #     "Owl": 0.1,
+                #     "Human": 1,
+                #     "V Sim Human": 1,
+                # }
 
                 # Get species-specific params
 
@@ -132,14 +136,9 @@ for win_meth in [
                 max_khz = max_khzs[species]
                 xi_max_s = xi_max_ss[species]
                 delta_xi = 0.01
-                noise_floor_bw_factor = noise_floor_bw_factors[species]
+                # noise_floor_bw_factor = noise_floor_bw_factors[species]
+                noise_floor_bw_factor = 1
                 global_xi_max_s = max(xi_max_ss.values()) if const_N_pd else None
-
-                # Redefine these for this run
-                xi_min_s = 0.01
-                delta_xi_s = 0.01
-                xi_max_s = 5.0
-                global_xi_max_s = 5.0
 
                 # Raise warning if tau is not a power of two AND the samplerate is indeed 44100
                 if np.log2(tau) != int(np.log2(tau)) and fs == 44100:
@@ -228,10 +227,10 @@ for win_meth in [
                         xis_s,
                         f,
                         colossogram,
-                        title=rf"Colossogram ($\tau={tau_s:.3f}$s)",
-                        max_khz=max_khz,
                         cmap="magma",
                     )
+                    plt.title(rf"Colossogram ($\tau={tau_s:.3f}$s)")
+                    plt.ylim(0, max_khz)
                     for f0_idx in good_peak_idxs:
                         plt.scatter(
                             xi_min_s * 1000 + (xi_max_s * 1000) / 50,
@@ -253,7 +252,7 @@ for win_meth in [
 
                 if output_peak_picks:
                     print("Plotting Peak Picks")
-                    target_xi = 0.01
+                    target_xi = xi_max_s / 10
                     xi_idx = np.argmin(np.abs(xis_s - target_xi))
                     coherence_slice = colossogram[xi_idx, :]
                     psd = get_welch(wf=wf, fs=fs, tau=tau)[1]
@@ -333,7 +332,10 @@ for win_meth in [
                                 f,
                                 colossogram,
                                 f0,
-                                decay_start_limit_xi_s,
+                                decay_start_limit_xi_s=decay_start_limit_xi_s,
+                                mse_thresh=mse_thresh,
+                                stop_fit=stop_fit,
+                                stop_fit_frac=stop_fit_frac,
                                 sigma_power=sigma_weighting_power,
                                 A_max=A_max,
                                 A_const=A_const,
@@ -354,8 +356,6 @@ for win_meth in [
                             # Plot the fit
                             plt.subplot(2, 2, subplot_idx)
                             pc.plot_N_xi_fit(N_xi_dict, color)
-                            # TEST
-                            plt.ylim(0, 0.1)
 
                             # Add params to a row dict
                             if good_peaks and output_spreadsheet:

@@ -40,11 +40,7 @@ def load_calc_colossogram(
     snapping_rhortle = np.nan
     rho = np.nan
 
-    match hpf["type"]:
-        case "kaiser":
-            hpf_str = rf"{hpf['cf']}Hz cf, {hpf['df']}Hz df, {hpf['rip']}dB rip"
-        case "spectral":
-            hpf_str = rf"{hpf['cf']}Hz"
+    hpf_str = get_hpf_str(hpf)
 
     win_meth_str = get_win_meth_str(win_meth)
 
@@ -229,24 +225,24 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             becky_bad_peak_freqs = []
         case "ACsb4rearSOAEwf1.mat":  # 1
             seth_good_peak_freqs = [964, 3031, 3160, 3957]
-            becky_good_peak_freqs = [964, 3025, 3155, 3951]
-            becky_bad_peak_freqs = []
+            becky_good_peak_freqs = [964, 3155, 3951]
+            becky_bad_peak_freqs = [3025,]
         case "ACsb24rearSOAEwfA1.mat":  # 2
             seth_good_peak_freqs = [1809, 2169, 3112, 3478]
             becky_good_peak_freqs = [2175, 2503, 3112, 3478]
             becky_bad_peak_freqs = [1728, 1814]
         case "ACsb30learSOAEwfA2.mat":  # 3
             seth_good_peak_freqs = [1803, 2137, 2406, 2778]
-            becky_good_peak_freqs = [1798, ]
-            becky_bad_peak_freqs = [2143, 2406, 2778]
+            becky_good_peak_freqs = [1798, 2143,]
+            becky_bad_peak_freqs = [2406, 2778]
 
         # Tokays
         case "tokay_GG1rearSOAEwf.mat":  # 0
-            good_peak_freqs = [3214]
-            bad_peak_freqs = [1184, 1572, 3714]
+            good_peak_freqs = [1572,]
+            bad_peak_freqs = [1184, 3214, 3714]
         case "tokay_GG2rearSOAEwf.mat":  # 1
-            good_peak_freqs = [1567, 3176, 3876]
-            bad_peak_freqs = [1195]
+            good_peak_freqs = [3176]
+            bad_peak_freqs = [1195, 3876]
         case "tokay_GG3rearSOAEwf.mat":  # 2
             good_peak_freqs = [1109, 3133]
             bad_peak_freqs = [1620, 2266]
@@ -265,12 +261,17 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             becky_bad_peak_freqs = [6164, 6896, 8426, 9252, 9779]
         case "TAG6rearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [5626, 8096, 8484, 9862]
-            becky_good_peak_freqs = [6029, 8102, 9857]
-            becky_bad_peak_freqs = [5626, 8489]
+            becky_good_peak_freqs = [6029, 8102, 8489, 9857]
+            becky_bad_peak_freqs = [5626]
         case "TAG9rearSOAEwf2.mat":  # 3
             seth_good_peak_freqs = [4931, 6993, 7450, 9878]
             becky_good_peak_freqs = [6977]
             becky_bad_peak_freqs = [3461, 4613, 4920, 6164, 7445, 9846, 10270]
+        case "owl_TAG4learSOAEwf1.mat": # 4
+            becky_good_peak_freqs = [5771, 7176, 9631]
+            becky_bad_peak_freqs = [4958, 8463, 8839]
+            bad_peak_freqs = []
+
 
         # Humans
         case "ALrearSOAEwf1.mat":  # 0
@@ -283,12 +284,12 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             becky_bad_peak_freqs = [3402, 8312, 8678]
         case "LSrearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [732, 985, 1637, 2229]
-            becky_good_peak_freqs = [732, 985, 2230]
-            becky_bad_peak_freqs = [1637, 3122]
+            becky_good_peak_freqs = [732, 2230]
+            becky_bad_peak_freqs = [985, 1637, 3122]
         case "TH13RearwaveformSOAE.mat":  # 3
             seth_good_peak_freqs = [904, 1518, 2040, 2697]
-            becky_good_peak_freqs = [904, 1518, 2040, 2697]
-            becky_bad_peak_freqs = []
+            becky_good_peak_freqs = [904, 1518, 2040]
+            becky_bad_peak_freqs = [2697]
     if species not in ['V Sim Human', 'Tokay']:
         good_peak_freqs = becky_good_peak_freqs
         bad_peak_freqs = becky_bad_peak_freqs
@@ -356,6 +357,8 @@ def get_fn(species, idx):
                     return "TAG6rearSOAEwf1.mat"
                 case 3:
                     return "TAG9rearSOAEwf2.mat"
+                case 4:
+                    return "owl_TAG4learSOAEwf1.mat"
         case "V Sim Human":
             return 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat'
         case _:
@@ -369,11 +372,13 @@ def get_spreadsheet_df(wf_fn, species):
         r"N_xi Fits/Data/2024.07analysisSpreadsheetV8_RW.xlsx",
         sheet_name=species if species != "Anole" else "Anolis",
     )
-    df.iloc[0]
     if (
         wf_fn == "TAG9rearSOAEwf2.mat"
     ):  # This one has trailing whitespace in Becky's excel sheet
         wf_fn += " "
+    if wf_fn == 'owl_TAG4learSOAEwf1.mat':
+        wf_fn = 'TAG4learSOAEwf1.mat'
+    
     return df[df["rootWF"].str.split(r"/").str[-1] == wf_fn].copy()
 
 
@@ -452,3 +457,11 @@ def kaiser_filter(wf, fs, cf, df, rip):
     stop = time.time()
     print(f"Filtering took {stop-start:.3f}s")
     return filtered_wf
+
+def get_hpf_str(hpf):
+    match hpf["type"]:
+        case "kaiser":
+            hpf_str = rf"{hpf['cf']}Hz cf, {hpf['df']}Hz df, {hpf['rip']}dB rip"
+        case "spectral":
+            hpf_str = rf"{hpf['cf']}Hz"
+    return hpf_str

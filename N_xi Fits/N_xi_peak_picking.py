@@ -6,8 +6,8 @@ from phaseco import *
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences
 
-for species in ['V Sim Human']:
-    for wf_idx in [0]:
+for species in ['Owl']:
+    for wf_idx in [4]:
         print(f"Processing {species} {wf_idx}")
         
         "Get waveform"
@@ -74,6 +74,8 @@ for species in ['V Sim Human']:
                 peak_guesses = [5609, 8090, 8492, 9862]
             case 'TAG9rearSOAEwf2.mat': #3
                 peak_guesses = [4928, 6993, 7450, 9869]
+            case "owl_TAG4learSOAEwf1.mat": #4
+                peak_guesses = [4958, 5771, 7176, 9631]
         
         
         peak_indices, _ = find_peaks(10*np.log10(psd), prominence=2)
