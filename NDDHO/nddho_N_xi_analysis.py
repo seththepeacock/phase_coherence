@@ -18,10 +18,15 @@ stop_fit_frac = 0.1
 
 # Loop Params
 A_consts = [True, False]
-num_iters = 5
-qs = [5, 10, 25, 50, 75, 100]
-f0s = [10, 100, 1000]
+num_iters = 10
+qs = [5, 10, 15, 20, 25, 50, 75, 100]
 pws = [True]
+f0s = [10, 100, 1000]
+
+# num_iters = 2
+# f0s = [100, 1000]
+# pws = [True, False]
+# qs = [5, 10, 25, 50, 75, 100]
 
 
 
@@ -38,7 +43,7 @@ colors = [
     "#126290",
 ]
 "Plotting Parameters"
-gen_plots = 1
+gen_plots = 0
 show_plots = 0
 fontsize = 8
 output_spreadsheet = 1

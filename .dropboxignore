@@ -1,0 +1,8 @@
+﻿.git
+__pycache__/
+*.pyc
+node_modules/
+*.o
+*.so
+.DS_Store
+Thumbs.db
