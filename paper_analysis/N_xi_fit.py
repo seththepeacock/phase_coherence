@@ -7,18 +7,19 @@ import pandas as pd
 import phaseco as pc
 
 all_species = ["Anole", "Human", "Owl", "Tokay"]
+speciess = ["Human"]
 
 for win_meth in [
-    # {"method": "zeta", "zeta": 0.01, "win_type": "hann"},
     {"method": "rho", "rho": 0.7},
+    # {"method": "zeta", "zeta": 0.01, "win_type": "hann"},
     # {"method": "zeta", "zeta": 0.01, "win_type": "boxcar"},
     # {"method": "static", "win_type": "hann"},
 ]:
     for pw in [True]:
         # Initialize list for row dicts for xlsx file
         rows = []
-        for species in all_species:
-            for wf_idx in range(1):
+        for species in speciess:
+            for wf_idx in range(4):
                 if wf_idx == 4 and species != "Owl":
                     continue
                 # if species == "V Sim Human" and wf_idx != 0:
@@ -32,12 +33,12 @@ for win_meth in [
 
                 "PARAMETERS"
                 # WF pre-processing parameters
-                bpf_center_freq = 3710
-                bpf_bandwidth = 250
+                # bpf_center_freq = 3710
+                # bpf_bandwidth = 250
                 filter = {
                     "type": "kaiser",
-                    # "cf": 300,
-                    "cf": (bpf_center_freq-bpf_bandwidth, bpf_center_freq+bpf_bandwidth),
+                    "cf": 300,
+                    # "cf": (bpf_center_freq-bpf_bandwidth, bpf_center_freq+bpf_bandwidth),
                     "df": 50,
                     "rip": 100,
                 }  # cutoff freq (HPF if one value, BPF if two), transition band width, and max allowed ripple (in dB)
@@ -47,7 +48,7 @@ for win_meth in [
 
                 # Coherence Parameters
                 hop_s = 0.01
-                tau_s = 2**13 / 44100  # Everyone uses the same tau_s
+                tau_s = 2**14 / 44100  # Everyone uses the same tau_s
                 tau = round(
                     tau_s * fs
                 )  # This is just 2**13 for (power of 2 = maximally efficient FFT), except for owls where fs!=44100
@@ -60,13 +61,12 @@ for win_meth in [
                 const_N_pd = 1
 
                 # Output options
-                output_colossogram = 0
+                output_colossogram = 1
                 output_peak_picks = 1
                 output_fits = 1
                 output_bad_fits = 1
                 output_spreadsheet = 0
-                output_avg_abs_phi = 1
-                show_plots = 1
+                show_plots = 0
 
                 # Fitting Parameters
                 mse_thresh = 0.0001 # Decay start is pushed forward xi by xi until MSE thresh falls below this value
@@ -100,8 +100,8 @@ for win_meth in [
                 xi_max_ss = {
                     "Anole": 0.1,
                     "Owl": 0.1,
-                    "Human": 0.3,
-                    # "Human": 1.0,
+                    # "Human": 0.3,
+                    "Human": 1.0,
                     "V Sim Human": 0.2,
                     "Tokay": 0.1,
                 }
@@ -134,7 +134,7 @@ for win_meth in [
 
                 "Calculate/load things"
                 # This will either load it if it's there or calculate it (and pickle it) if not
-                N_xi_folder = r"N_xi Fits/"
+                paper_analysis_folder = r"paper_analysis/"
                 colossogram_dict = load_calc_colossogram(
                     wf,
                     wf_idx,
@@ -143,7 +143,7 @@ for win_meth in [
                     species,
                     fs,
                     filter,
-                    N_xi_folder,
+                    paper_analysis_folder,
                     pw,
                     tau,
                     tau_s,
@@ -199,25 +199,15 @@ for win_meth in [
 
                 "Make more directories"
                 results_folder = (
-                    N_xi_folder + rf"Results/Results (PW={pw}, {win_meth_str})"
+                    paper_analysis_folder + rf"Results/Results (PW={pw}, {win_meth_str})"
                 )
-                all_results_folder = N_xi_folder + rf"Results/Results (All)"
+                all_results_folder = paper_analysis_folder + rf"Results/Results (All)"
                 os.makedirs(results_folder, exist_ok=True)
                 os.makedirs(all_results_folder, exist_ok=True)
-                os.makedirs(N_xi_folder + r"Additional Figures/", exist_ok=True)
+                os.makedirs(paper_analysis_folder + r"Additional Figures/", exist_ok=True)
 
                 "Plots"
                 suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{wf_len_s}s WF]   {method_id}"
-
-                if output_avg_abs_phi:
-                    print("Plotting <|phi|>")
-                    plt.close("all")
-                    plt.figure(figsize=(15, 5))
-                    target_xi = xi_max_s / 10
-                    xi_idx = np.argmin(np.abs(xis_s - target_xi))
-                    coherence_slice = colossogram[xi_idx, :]
-                    phases = np.angle(coherence_slice)
-                    phases = np.unwrap(phases)
                     
 
                 if output_colossogram:
