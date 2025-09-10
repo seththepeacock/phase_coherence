@@ -27,7 +27,7 @@ for win_meth in [
                     "rip": 100,
                 }  # cutoff freq (HPF if one value, BPF if two), transition band width, and max allowed ripple (in dB)
                 wf_len_s = 60  # Will crop waveform to this length (in seconds)
-                scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde of vertical shift on PSD; 
+                scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde of vertical shift on PSD;
                 # only actually scales if we know the right scaling constant, which is only Anoles and Humans)
 
                 # Species parameters
@@ -42,23 +42,68 @@ for win_meth in [
 
                 # Coherence Parameters
                 hop_s = 0.01
-                xi_s = 0.1
+                xi_s = 0.01
                 tau_s = 2**13 / 44100  # Everyone uses the same tau_s
-                
+
                 tau = round(
                     tau_s * fs
                 )  # This is just 2**13 for (power of 2 = maximally efficient FFT), except for owls where fs!=44100
-                hop = round(hop_s*fs)
-                xi = round(xi_s*fs)
+                hop = round(hop_s * fs)
+                xi = round(xi_s * fs)
+
+                pw = False
 
                 # GET AC
-                ac_dict = pc.get_autocoherence(wf, fs, xi, pw, tau, hop=hop, win_meth=win_meth, ref_type="next_seg", return_avg_abs_pd=True, return_dict=True)
-                f, avg_abs_pd = ac_dict['f'], ac_dict['avg_abs_pd']
-                
+                ac_dict_xi = pc.get_autocoherence(
+                    wf,
+                    fs,
+                    xi,
+                    pw,
+                    tau,
+                    hop=hop,
+                    win_meth=win_meth,
+                    ref_type="next_seg",
+                    return_avg_abs_pd=True,
+                    return_dict=True,
+                )
+                f_xi, avg_abs_pd_xi = ac_dict_xi["f"], ac_dict_xi["avg_abs_pd"]
+
+                ac_dict_omega = pc.get_autocoherence(
+                    wf,
+                    fs,
+                    xi,
+                    pw,
+                    tau,
+                    hop=hop,
+                    ref_type="next_freq",
+                    return_avg_abs_pd=True,
+                    return_dict=True,
+                )
+                f_omega, avg_abs_pd_omega = ac_dict_omega["f"], ac_dict_omega["avg_abs_pd"]
+
                 # PLOT <|phi|>
-                plt.plot(f/1000, avg_abs_pd)
+                plt.figure(figsize=(8, 12))
+                plt.suptitle(f"{species} {wf_idx}")
+                plt.subplot(1, 2, 1)
+                plt.plot(
+                    f_xi / 1000,
+                    avg_abs_pd_xi,
+                    label=rf"$\left < | \Delta \phi_\xi | \right >$",
+                )
+
                 plt.xlim(0, max_khz)
+                plt.xlabel("Frequency [kHz]")
+                plt.ylim(0, np.pi)
+                plt.ylabel(r"$\left < | \Delta \phi_\xi | \right >$")
+
+                plt.subplot(1, 2, 2)
+                plt.plot(
+                    f_omega / 1000,
+                    avg_abs_pd_omega,
+                    label=rf"$\left < | \Delta \phi_\omega | \right >$",
+                )
+                plt.xlim(0, max_khz)
+                plt.xlabel("Frequency [kHz]")
+                plt.ylim(0, np.pi)
+                plt.ylabel(r"$\left < | \Delta \phi_\omega | \right >$")
                 plt.show()
-
-
-                

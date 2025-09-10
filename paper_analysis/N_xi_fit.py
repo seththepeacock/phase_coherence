@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import phaseco as pc
 
-all_species = ["Anole", "Human", "Owl", "Tokay"]
-speciess = ["Human"]
+all_species = ["Human", "Anole", "Owl", "Tokay"]
+speciess = all_species
+wf_idxs = range(5)
 
 for win_meth in [
     {"method": "rho", "rho": 0.7},
@@ -15,11 +16,11 @@ for win_meth in [
     # {"method": "zeta", "zeta": 0.01, "win_type": "boxcar"},
     # {"method": "static", "win_type": "hann"},
 ]:
-    for pw in [True]:
+    for tau_power in [13, 14]:
         # Initialize list for row dicts for xlsx file
         rows = []
         for species in speciess:
-            for wf_idx in range(4):
+            for wf_idx in wf_idxs:
                 if wf_idx == 4 and species != "Owl":
                     continue
                 # if species == "V Sim Human" and wf_idx != 0:
@@ -47,8 +48,9 @@ for win_meth in [
                 # only actually scales if we know the right scaling constant, which is only Anoles and Humans)
 
                 # Coherence Parameters
+                pw = True
                 hop_s = 0.01
-                tau_s = 2**14 / 44100  # Everyone uses the same tau_s
+                tau_s = 2**tau_power / 44100  # Everyone uses the same tau_s
                 tau = round(
                     tau_s * fs
                 )  # This is just 2**13 for (power of 2 = maximally efficient FFT), except for owls where fs!=44100
@@ -61,18 +63,20 @@ for win_meth in [
                 const_N_pd = 1
 
                 # Output options
-                output_colossogram = 1
-                output_peak_picks = 1
+                output_colossogram = 0
+                output_peak_picks = 0
                 output_fits = 1
                 output_bad_fits = 1
-                output_spreadsheet = 0
+                output_spreadsheet = 1
                 show_plots = 0
 
                 # Fitting Parameters
+                bootstrap = 0 # Bootstrap fits for a CI
+                bs_resample_prop = 1.0 # Proportion of fit points to resample
                 mse_thresh = 0.0001 # Decay start is pushed forward xi by xi until MSE thresh falls below this value
                 trim_step = 1
-                A_max = np.inf  # 1 or np.inf
-                A_const = False  # Fixes the amplitude of the decay at 1
+                A_max = np.inf # 1 or np.inf
+                A_const = True  # Fixes the amplitude of the decay at 1
                 stop_fit = 'frac' # stops fit when it reaches a fraction of the fit start value
                 stop_fit_frac = 0.1 # aforementioned fraction
                 sigma_weighting_power = (
@@ -121,7 +125,6 @@ for win_meth in [
                 decay_start_limit_xi_s = None  # Defaults to 25% of the waveform
                 max_khz = max_khzs[species]
                 xi_max_s = xi_max_ss[species]
-                delta_xi = 0.01
                 # noise_floor_bw_factor = noise_floor_bw_factors[species]
                 noise_floor_bw_factor = 1
                 global_xi_max_s = max(xi_max_ss.values()) if const_N_pd else None
@@ -303,7 +306,6 @@ for win_meth in [
                                 print("WARNING: No good peaks were picked!")
                             # Could also just be that there are no bad peaks!
                             continue
-
                         if not good_peaks and not output_bad_fits:
                             continue
 
@@ -319,7 +321,7 @@ for win_meth in [
                         ):
 
                             # Fit peak
-                            N_xi, N_xi_dict = get_N_xi(
+                            N_xi, N_xi_dict = pc.get_N_xi(
                                 xis_s,
                                 f,
                                 colossogram,
@@ -332,6 +334,8 @@ for win_meth in [
                                 A_max=A_max,
                                 A_const=A_const,
                                 noise_floor_bw_factor=noise_floor_bw_factor,
+                                bootstrap=bootstrap,
+                                bs_resample_prop=bs_resample_prop
                             )
 
                             # Unpack dictionary
@@ -345,9 +349,10 @@ for win_meth in [
                             mse = N_xi_dict["mse"]
                             decayed_idx = N_xi_dict["decayed_idx"]
 
+
                             # Plot the fit
                             plt.subplot(2, 2, subplot_idx)
-                            pc.plot_N_xi_fit(N_xi_dict, color)
+                            pc.plot_N_xi_fit(N_xi_dict, color, bootstrap=bootstrap)
 
                             # Add params to a row dict
                             if good_peaks and output_spreadsheet:
@@ -366,6 +371,10 @@ for win_meth in [
                                     "Decayed Xi": xis_s[decayed_idx],
                                     "Decayed Num Cycles": xis_s[decayed_idx] * f0_exact,
                                 }
+                                if bootstrap:
+                                    row.update(
+                                        {"Average CI Width":N_xi_dict['avg_delta_CI']}
+                                    )
                                 if species not in ["Tokay", "V Sim Human"]:
                                     SNRfit, fwhm = get_params_from_df(df, f0)
                                     row["SNRfit"], row["FWHM"] = SNRfit, fwhm
@@ -374,7 +383,9 @@ for win_meth in [
                         plt.tight_layout()
                         os.makedirs(results_folder, exist_ok=True)
                         # fits_folder = f'{fig_folder}' if good_peaks else 'Additional Figures'
-                        fits_str = f"Fits" if good_peaks else "Bad Fits"
+                        # A_str_mod = f'BRP={bs_resample_prop}, A_max={A_max}'
+                        A_str_mod = f'A_const={A_const}'
+                        fits_str = f"Fits ({A_str_mod})" if good_peaks else f"Bad Fits ({A_str_mod})"
                         for folder in [results_folder, all_results_folder]:
                             os.makedirs(rf"{folder}/{fits_str}", exist_ok=True)
                             plt.savefig(
@@ -388,7 +399,7 @@ for win_meth in [
             # Save parameter data as xlsx
             df_fitted_params = pd.DataFrame(rows)
             N_xi_fitted_parameters_fn = (
-                rf"{results_folder}/N_xi Fitted Parameters ({win_meth_str}, PW={pw})"
+                rf"{results_folder}/N_xi Fitted Parameters ({win_meth_str}, PW={pw}, tau={tau_s*1000:.2f}ms, {A_str_mod})"
             )
             df_fitted_params.to_excel(rf"{N_xi_fitted_parameters_fn}.xlsx", index=False)
 
