@@ -6,17 +6,17 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import phaseco as pc
 
-all_species = ["Human", "Anole", "Owl", "Tokay"]
-speciess = ["Human"]
-wf_idxs = range(1)
+all_species = ["Anole", "Human", "Owl", "Tokay"]
+speciess = all_species
+wf_idxs = range(5)
 
 for win_meth in [
-    # {"method": "rho", "rho": 0.7},
+    {"method": "rho", "rho": 0.7},
     # {"method": "zeta", "zeta": 0.01, "win_type": "hann"},
     # {"method": "zeta", "zeta": 0.01, "win_type": "boxcar"},
-    {"method": "static", "win_type": "hann"},
+    # {"method": "static", "win_type": "hann"},
 ]:
-    for tau_power in [13]:
+    for tau_power in [13, 14, 12]:
         # Initialize list for row dicts for xlsx file
         rows = []
         for species in speciess:
@@ -57,27 +57,31 @@ for win_meth in [
                 xi_min_s = 0.001
                 delta_xi_s = 0.001
                 hop = round(hop_s * fs)
+                const_N_pd = 1
+
+                # Options for iterating through subjects
                 force_recalc_colossogram = 0
                 plot_what_we_got = 0
                 only_calc_new_coherences = 0
-                const_N_pd = 1
+                
 
                 # Output options
-                output_colossogram = 1
-                output_peak_picks = 1
-                output_fits = 0
-                output_bad_fits = 0
-                output_spreadsheet = 0
+                output_colossogram = 0
+                output_peak_picks = 0
+                output_fits = 1
+                output_bad_fits = 1
+                output_spreadsheet = 1
                 show_plots = 0
 
                 # Fitting Parameters
-                bootstrap = 0 # Bootstrap fits for a CI
-                bs_resample_prop = 1.0 # Proportion of fit points to resample
+                N_bs = 100 # Num of bootstraps to do to calculate fit func CI (0 = standard, no bootstrapping)
                 # mse_thresh = 0.0001 # Decay start is pushed forward xi by xi until MSE thresh falls below this value
                 mse_thresh = np.inf
                 trim_step = 1
                 A_max = np.inf # 1 or np.inf
-                A_const = True  # Fixes the amplitude of the decay at 1
+                A_const = False  # Fixes the amplitude of the decay at 1
+                start_fit = 'frac'
+                start_fit_frac = 0.9
                 stop_fit = 'frac' # stops fit when it reaches a fraction of the fit start value
                 stop_fit_frac = 0.1 # aforementioned fraction
                 sigma_weighting_power = (
@@ -94,7 +98,7 @@ for win_meth in [
                 xi_max_ss = {
                     "Anole": 0.1,
                     "Owl": 0.1,
-                    # "Human": 0.3,
+                    #"Human": 0.3,
                     "Human": 1.0,
                     "V Sim Human": 0.2,
                     "Tokay": 0.1,
@@ -128,7 +132,7 @@ for win_meth in [
                 "Calculate/load things"
                 # This will either load it if it's there or calculate it (and pickle it) if not
                 paper_analysis_folder = r"paper_analysis/"
-                colossogram_dict = load_calc_colossogram(
+                cgram = load_calc_colossogram(
                     wf,
                     wf_idx,
                     wf_fn,
@@ -150,32 +154,35 @@ for win_meth in [
                     only_calc_new_coherences,
                     const_N_pd,
                     scale,
+                    N_bs,
+                    good_peak_freqs, 
+                    bad_peak_freqs                    
                 )
-                if "plot_what_we_got" in colossogram_dict.keys():
+                if "plot_what_we_got" in cgram.keys():
                     print("NO PICKLE, SKIPPING")
                     continue
-                if "only_calc_new_coherences" in colossogram_dict.keys():
+                if "only_calc_new_coherences" in cgram.keys():
                     print("ALREADY CALCULATED, SKIPPING")
                     continue
                 # Load everything that wasn't explicitly "saved" in the filename
-                colossogram = colossogram_dict["colossogram"]
-                fn_id = colossogram_dict["fn_id"]
-                win_meth_str = colossogram_dict["win_meth_str"]
-                f = colossogram_dict["f"]
-                xis_s = colossogram_dict["xis_s"]
-                N_pd_min = colossogram_dict["N_pd_min"]
-                N_pd_max = colossogram_dict["N_pd_max"]
-                hop = colossogram_dict["hop"]
+                colossogram = cgram["colossogram"]
+                fn_id = cgram["fn_id"]
+                win_meth_str = cgram["win_meth_str"]
+                f = cgram["f"]
+                xis_s = cgram["xis_s"]
+                N_pd_min = cgram["N_pd_min"]
+                N_pd_max = cgram["N_pd_max"]
+                hop = cgram["hop"]
 
                 try:
-                    method_id = colossogram_dict["method_id"]
+                    method_id = cgram["method_id"]
                 except:
-                    N_pd_str = get_N_pd_str(const_N_pd, N_pd_min, N_pd_max)
+                    N_pd_str = pc.get_N_pd_str(const_N_pd, N_pd_min, N_pd_max)
                     method_id = rf"[{win_meth_str}]   [$\tau$={tau_s*1000:.2f}ms]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [Hop={(hop / fs)*1000:.0f}ms]   [{N_pd_str}]"
                 try:
-                    filter_str = colossogram_dict["hpf_str"]
+                    filter_str = cgram["hpf_str"]
                 except:
-                    filter_str = colossogram_dict["filter_str"]
+                    filter_str = cgram["filter_str"]
 
 
                 # Handle transpose from old way
@@ -206,7 +213,7 @@ for win_meth in [
                     print("Plotting Colossogram")
                     plt.close("all")
                     plt.figure(figsize=(15, 5))
-                    plot_colossogram(
+                    pc.plot_colossogram(
                         xis_s,
                         f,
                         colossogram,
@@ -321,20 +328,17 @@ for win_meth in [
 
                             # Fit peak
                             N_xi, N_xi_dict = pc.get_N_xi(
-                                xis_s,
-                                f,
-                                colossogram,
+                                cgram,
                                 f0,
                                 decay_start_limit_xi_s=decay_start_limit_xi_s,
                                 mse_thresh=mse_thresh,
                                 stop_fit=stop_fit,
                                 stop_fit_frac=stop_fit_frac,
+                                start_fit_frac=start_fit_frac,
                                 sigma_power=sigma_weighting_power,
                                 A_max=A_max,
                                 A_const=A_const,
                                 noise_floor_bw_factor=noise_floor_bw_factor,
-                                bootstrap=bootstrap,
-                                bs_resample_prop=bs_resample_prop,
                                 fit_func=fit_func,
                             )
 
@@ -352,7 +356,7 @@ for win_meth in [
 
                             # Plot the fit
                             plt.subplot(2, 2, subplot_idx)
-                            pc.plot_N_xi_fit(N_xi_dict, color, bootstrap=bootstrap)
+                            pc.plot_N_xi_fit(N_xi_dict, color)
 
                             # Add params to a row dict
                             if good_peaks and output_spreadsheet:
@@ -371,7 +375,7 @@ for win_meth in [
                                     "Decayed Xi": xis_s[decayed_idx],
                                     "Decayed Num Cycles": xis_s[decayed_idx] * f0_exact,
                                 }
-                                if bootstrap:
+                                if N_bs is not None:
                                     row.update(
                                         {"Average CI Width":N_xi_dict['avg_delta_CI']}
                                     )
@@ -384,7 +388,7 @@ for win_meth in [
                         os.makedirs(results_folder, exist_ok=True)
                         # fits_folder = f'{fig_folder}' if good_peaks else 'Additional Figures'
                         # A_str_mod = f'BRP={bs_resample_prop}, A_max={A_max}'
-                        fits_mod_str = f'fit_func={fit_func}, A_const={A_const}'
+                        fits_mod_str = f'N_bs={N_bs}, A_const={A_const}'
                         fits_str = f"Fits ({fits_mod_str})" if good_peaks else f"Bad Fits ({fits_mod_str})"
                         for folder in [results_folder, all_results_folder]:
                             os.makedirs(rf"{folder}/{fits_str}", exist_ok=True)
