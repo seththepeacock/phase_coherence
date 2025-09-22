@@ -186,6 +186,7 @@ M= int(np.floor(len(wf)/Npts))  # numb. of tau time segments (no overlap)
 xiS= int(xiS)  # convert xi shift {pts} to int (as may be needed)
 ###Mxi= int(np.floor(len(wf)/(xiS)-np.ceil(Npts/xiS)-5))  # max> numb. of xi-shifted tau time segments (w/ overlap)
 Mxi= int(np.floor(len(wf)/(np.abs(xiS))-np.ceil(Npts/np.abs(xiS))-5))
+Mxi= int((len(wf) - Npts) / np.abs(xiS)) + 1
 # ---
 if (Mxi>=xiWmax):  # limit # of avgs for xi-shifting
     Mxi= xiWmax
@@ -203,7 +204,7 @@ indxFl= np.where(freq>=fPlot[0]*1000)[0][0]  # find freq index re above (0.2) kH
 indxFh= np.where(freq<=fPlot[1]*1000)[0][-1]  # find freq index re under (7) kHz
 # --- dertermine Gaussin std for xi-windowing
 if (varXiWin==1):
-    winGstd= rho*xiS/2*np.sqrt(2*np.log(2))   # proprtional to xiS such that FWHM ~ xiS
+    winGstd= rho*xiS/(2*np.sqrt(2*np.log(2)))   # proprtional to xiS such that FWHM ~ xiS
 else:
     winGstd= winGstdVAL  # fixed Cxi Gaussian window STD
 # --- send some vals to screen for ref
@@ -439,6 +440,7 @@ phaseDtau = np.diff(phaseUWtau, axis=1) # **
 # --- also apply to the xi-shifted vers.
 phaseUWxi= np.unwrap(storePxi, axis=1)
 phaseDxi = np.diff(phaseUWxi, axis=1) 
+print(np.max(phaseDxi), np.min(phaseDxi))
 # --- now compute avgd vers
 storePDomegaAVG= np.average(np.abs(phaseDomega),axis=1)  # lastly avg. the abs val. over windows
 storePDtauAVG= np.average(np.abs(phaseDtau),axis=1)
@@ -843,7 +845,8 @@ if figCohero==1:
     plt.tight_layout()
 #
 # ==== ** FIG -  Avg. phase diffs: adjacent freq bin vs adjacent window
-if figPhase==1:
+#HERE
+if figPhase:
     fig7, ax7 = plt.subplots(2,1)
     ax7[0].plot(freqAVG/1000,storePDomegaAVG,linestyle='--',marker=markB, 
                    color='r',label=r'$\phi^{\omega}$')
@@ -858,6 +861,8 @@ if figPhase==1:
     ax7[0].grid()
     ax7[0].set_xlim(fPlot)
     fig7.delaxes(ax7[1])
+
+
 # # ==== ** FIG -  Avg. phase diffs: adjacent freq bin vs adjacent window
 # if figPhase==1:
 #     fig7, ax7 = plt.subplots()

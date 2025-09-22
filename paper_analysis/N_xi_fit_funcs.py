@@ -11,7 +11,7 @@ from phaseco import *
 import phaseco as pc
 from phaseco.helper_funcs import get_win_meth_str
 import time
-from scipy.fft import rfftfreq
+from scipy.fft import rfft, rfftfreq
 from tqdm import tqdm
 
 
@@ -22,6 +22,7 @@ def load_calc_colossogram(
     wf_idx,
     wf_fn,
     wf_len_s,
+    wf_pp,
     species,
     fs,
     filter,
@@ -29,6 +30,7 @@ def load_calc_colossogram(
     pw,
     tau,
     tau_s,
+    nfft,
     xi_min_s,
     xi_max_s,
     global_xi_max_s,
@@ -40,9 +42,13 @@ def load_calc_colossogram(
     const_N_pd,
     scale,
     N_bs,
-    good_peak_freqs, 
-    bad_peak_freqs,
+    f0s,
+    wa,
 ):
+    # Handle defaults
+    if tau_s is None:
+        tau_s = tau / fs
+
     # Define these, otherwise the old way loading will be mad
     snapping_rhortle = np.nan
     rho = np.nan
@@ -53,9 +59,15 @@ def load_calc_colossogram(
 
     # Build strings
     N_bs_str = "" if N_bs == 0 else f"N_bs={N_bs}, "
-    fn_id = rf"{species} {wf_idx}, PW={pw}, {win_meth_str}, hop={(hop/fs)*1000:.0f}ms, tau={tau_s*1000:.0f}ms, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+    pw_str = f"{pw}" if not wa or not pw else "WA"
+    const_N_pd_str = "" if const_N_pd else 'N_pd=max, '
+    f0s_str = "" if f0s is None else f"f0s={f0s}, "
+    nfft_str = "" if nfft is None else f"nfft={nfft}, "
+    delta_xi_str = "" if xi_min_s == 0.001 else f'delta_xi={xi_min_s*1000:.0f}ms, '
+    hop_str = f'hop={(hop/fs)*1000:.0f}ms' if hop > 1 else f'hop={(round(hop * tau)/fs)*1000:.0f}ms'
+    fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, {hop_str}, tau={tau_s*1000:.0f}ms, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{f0s_str}{nfft_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{fn_id} (Colossogram)"
-    print(f"Processing {species} {wf_idx} ({win_meth_str}, PW={pw}, tau={tau_s*1000:.2f}ms{N_bs_str})")
+    print(f"Processing {species} {wf_idx} ({win_meth_str}, PW={pw_str}, tau={tau_s*1000:.2f}ms, N_bs={N_bs})")
 
     # Convert to samples
     xi_min = round(xi_min_s * fs)
@@ -63,12 +75,19 @@ def load_calc_colossogram(
 
     # First, try to load in the new way
     pkl_folder = paper_analysis_folder + "Pickles/"
+    pkl_fp = pkl_folder + pkl_fn + ".pkl"
     os.makedirs(pkl_folder, exist_ok=True)
-    if os.path.exists(pkl_folder + pkl_fn + ".pkl") and not force_recalc_colossogram:
+    print(pkl_fp)
+
+    if os.path.exists(pkl_fp) and not force_recalc_colossogram:
         with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
             (colossogram_dict) = pickle.load(file)
         if only_calc_new_coherences:
             colossogram_dict["only_calc_new_coherences"] = 1
+        colossogram_dict['fn_id'] = fn_id
+        with open(pkl_fp, "wb") as file:
+           pickle.dump(colossogram_dict, file)
+        
 
     # Then, try to load in the old way
     else:
@@ -122,33 +141,37 @@ def load_calc_colossogram(
             if (
                 plot_what_we_got
             ):  # Unless plot_what we got, in which case we just end the func here
-                return {"plot_what_we_got": 1}
-            # First, process the wf
-            if species in ["Anole", "Human"] and scale:  # Scale wf
-                wf = scale_wf(wf)
-
-            # Crop wf
-            wf = crop_wf(wf, fs, wf_len_s)
-
-            # Apply filter
-            wf = filter_wf(wf, fs, filter, species)
-
-            # Prep for bootstrap
-            f0s_bs = None if N_bs == 0 else np.concatenate((good_peak_freqs, bad_peak_freqs))
+                return {"plot_what_we_got": 1}, wf_pp
             
+            # First, process the wf (unless it's already processed)
+            if wf_pp is None:            
+                if species in ["Anole", "Human"] and scale:  # Scale wf
+                    wf = scale_wf(wf)
+
+                # Crop wf
+                wf_cropped = crop_wf(wf, fs, wf_len_s)
+
+                # Apply filter
+                wf_pp = filter_wf(wf_cropped, fs, filter, species)
+            # If it's already been processed and passed in, just use it
+            else:
+                print("Calculating colossogram with prefiltered waveform!")
+
+
             # Then get colossogram!
             colossogram_dict = pc.get_colossogram(
-                wf,
+                wf_pp,
                 fs,
                 xis={"xi_min": xi_min, "xi_max": xi_max, "delta_xi": xi_min},
                 hop=hop,
                 tau=tau,
+                nfft=nfft,
                 win_meth=win_meth,
                 pw=pw,
                 const_N_pd=const_N_pd,
                 global_xi_max_s=global_xi_max_s,
                 N_bs=N_bs,
-                f0s_bs=f0s_bs,
+                f0s=f0s,
                 return_dict=True,
             )
             # Add some extra keys
@@ -162,7 +185,7 @@ def load_calc_colossogram(
             with open(pkl_folder + pkl_fn + ".pkl", "wb") as file:
                 pickle.dump(colossogram_dict, file)
     # We now have colossogram_dict either from a saved pickle (new or old) or from the calculation; return it!
-    return colossogram_dict
+    return colossogram_dict, wf_pp
 
 
 def scale_wf_long_way(wf):
@@ -322,15 +345,15 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
 #     return wf
 
 
-def filter_wf(wf, fs, filter, species):
-    if filter is not None and species != "V Sim Human":
-        match filter["type"]:
+def filter_wf(wf, fs, filter_meth, species):
+    if filter_meth is not None and species != "V Sim Human":
+        match filter_meth["type"]:
             case "spectral":
-                wf = spectral_filter(wf, fs, filter["cf"], type="hp")
+                wf = spectral_filter(wf, fs, filter_meth["cf"], type="hp")
             case "kaiser":
-                wf = kaiser_filter(wf, fs, filter["cf"], filter["df"], filter["rip"])
+                wf = kaiser_filter(wf, fs, filter_meth["cf"], filter_meth["df"], filter_meth["rip"])
             case _:
-                raise ValueError(f"{filter['type']} is not a valid HPF type!")
+                raise ValueError(f"{filter_meth['type']} is not a valid HPF type!")
     return wf
 
 
@@ -449,16 +472,16 @@ def spectral_filter(wf, fs, cutoff_freq, type="hp"):
     return filtered_wf
 
 
-def kaiser_filter(wf, fs, cf, df, rip):
+def kaiser_filter(wf, fs, cf=300, df=50, rip=100):
     """
-    Apply a FIR filter (highpass or bandpass) using a Kaiser window.
+    Apply an FIR, linear phase filter designed with a Kaiser window.
 
     Parameters:
         wf (array): Input waveform.
         fs (float): Sampling rate (Hz).
-        cf (float or tuple of floats): Cutoff frequency(ies) (Hz).
+        cf (float or tuple of floats): Cutoff freq (Hz); Two frequencies = BP, one freq = HP
         df (float): Transition bandwidth (Hz).
-        rip (float): Stopband attenuation (dB).
+        rip (float): Max allowed ripple in dB; that is, abs(A(w) - D(w))) < 10**(-ripple/20)
 
     Returns:
         array: Filtered waveform.
@@ -489,13 +512,26 @@ def kaiser_filter(wf, fs, cf, df, rip):
     return filtered_wf
 
 
-def get_filter_str(filter):
-    match filter["type"]:
+
+def get_filter_str(filter_meth):
+    match filter_meth["type"]:
         case "kaiser":
-            if not isinstance(filter["cf"], tuple):
-                filter_str = rf"HPF=({filter['cf']}Hz cf, {filter['df']}Hz df, {filter['rip']}dB rip)"
+            if not isinstance(filter_meth["cf"], tuple):
+                filter_str = rf"HPF=({filter_meth['cf']}Hz cf, {filter_meth['df']}Hz df, {filter_meth['rip']}dB rip)"
             else:
-                filter_str = rf"BPF=({filter['cf']}Hz cf, {filter['df']}Hz df, {filter['rip']}dB rip)"
+                filter_str = rf"BPF=({filter_meth['cf']}Hz cf, {filter_meth['df']}Hz df, {filter_meth['rip']}dB rip)"
         case "spectral":
-            filter_str = rf"HPF=({filter['cf']}Hz)"
+            filter_str = rf"HPF=({filter_meth['cf']}Hz)"
     return filter_str
+
+def get_win_bw(win_meth, tau,  fs, oversample=8, win_bw_thresh_db=3):
+    N = tau * oversample
+    win, _ = pc.get_win(win_meth, tau=tau, xi=None)
+    win_psd_db = 10*np.log10(np.abs(rfft(win, N))**2)
+    peak_db = win_psd_db[0]
+    target_db = peak_db - win_bw_thresh_db
+    
+    idx = np.where(win_psd_db <= target_db)[0]
+    f_win = rfftfreq(N, 1/fs)
+    bw = f_win[idx]
+    return bw

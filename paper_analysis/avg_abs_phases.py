@@ -8,6 +8,8 @@ wf_idxs = [2]
 
 for species in speciess:
     for wf_idx in wf_idxs:
+        species = "Anole"
+        wf_idx = 2
         "Get waveform"
         wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(
             species=species,
@@ -37,7 +39,8 @@ for species in speciess:
         max_khz = max_khzs[species]
 
         # Coherence Parameters
-        win_meth = {"method":"static", "win_type":"boxcar"}
+        # win_meth = {"method":"static", "win_type":"boxcar"}
+        win_meth = {"method":"rho", "rho":0.7}
         
         # hop_s = 0.01
         # xi_s = 0.01
@@ -147,12 +150,12 @@ for species in speciess:
         plt.suptitle(rf"{species} {wf_idx}   [{wf_fn}]   [$\tau$={tau_s:.4g}]   [$\xi$={xi_s:.4g}]")
         plt.subplot(3, 1, 1)
         plt.title(r"$\xi$-Referenced Phases")
-        plt.plot(
+        plt.scatter(
             f_xi / 1000,
             avg_abs_pd_xi,
             label=rf"Uncorrected",
         )
-        plt.plot(
+        plt.scatter(
             f_xi / 1000,
             avg_abs_pd_xi_phase_corr,
             label=rf"Phase Corrected",
@@ -166,12 +169,12 @@ for species in speciess:
 
         plt.subplot(3, 1, 2)
         plt.title(r"$\omega$-Referenced Phases")
-        plt.plot(
+        plt.scatter(
             f_omega / 1000,
             avg_abs_pd_omega,
             label=rf"Uncorrected",
         )
-        plt.plot(
+        plt.scatter(
             f_omega / 1000,
             avg_abs_pd_omega_phase_corr,
             label=rf"Phase Corrected",
@@ -183,12 +186,12 @@ for species in speciess:
 
         plt.subplot(3, 1, 3)
         plt.title(r"$\tau$-Referenced Phases")
-        plt.plot(
+        plt.scatter(
             f_tau / 1000,
             avg_abs_pd_tau,
             label=rf"Uncorrected",
         )
-        plt.plot(
+        plt.scatter(
             f_tau_phase_corr / 1000,
             avg_abs_pd_tau_phase_corr,
             label=rf"Phase Corrected",
