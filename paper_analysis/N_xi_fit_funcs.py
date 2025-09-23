@@ -61,14 +61,14 @@ def load_calc_colossogram(
     N_bs_str = "" if N_bs == 0 else f"N_bs={N_bs}, "
     pw_str = f"{pw}" if not wa or not pw else "WA"
     const_N_pd_str = "" if const_N_pd else 'N_pd=max, '
-    f0s_str = "" if f0s is None else f"f0s={f0s}, "
+    f0s_str = "" if f0s is None else f"f0s={np.array2string(f0s, formatter={'float' : lambda x: "%.0f" % x})}, "
     nfft_str = "" if nfft is None else f"nfft={nfft}, "
     delta_xi_str = "" if xi_min_s == 0.001 else f'delta_xi={xi_min_s*1000:.0f}ms, '
     hop_str = f'hop={(hop/fs)*1000:.0f}ms' if hop > 1 else f'hop={(round(hop * tau)/fs)*1000:.0f}ms'
-    fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, {hop_str}, tau={tau_s*1000:.0f}ms, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{f0s_str}{nfft_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+    fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, {hop_str}, tau={tau_s*1000:.0f}ms, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{fn_id} (Colossogram)"
-    print(f"Processing {species} {wf_idx} ({win_meth_str}, PW={pw_str}, tau={tau_s*1000:.2f}ms, N_bs={N_bs})")
-
+    # print(f"Processing {species} {wf_idx} ({win_meth_str}, PW={pw_str}, tau={tau_s*1000:.2f}ms, N_bs={N_bs})")
+    print(f"Processing {fn_id}")
     # Convert to samples
     xi_min = round(xi_min_s * fs)
     xi_max = round(xi_max_s * fs)
@@ -245,25 +245,29 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
     match wf_fn:
         # Vaclav's Human
         case "longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat":
-            good_peak_freqs = [1157, 1244, 1518, 1976]
-            bad_peak_freqs = []
+            seth_good_peak_freqs = [1157, 1244, 1518, 1976]
+            seth_bad_peak_freqs = []
         # Anoles
         case "AC6rearSOAEwfB1.mat":  # 0
-            seth_good_peak_freqs = [1233, 2164, 3714, 4500]
+            seth_good_peak_freqs = [1233, 2153, 3704, 4500]
+            seth_bad_peak_freqs = []
             becky_good_peak_freqs = [1233, 2164, 3709, 4506]
             becky_bad_peak_freqs = []
         case "ACsb4rearSOAEwf1.mat":  # 1
-            seth_good_peak_freqs = [964, 3031, 3160, 3957]
+            seth_good_peak_freqs = [964, 3155, 3951]
+            seth_bad_peak_freqs = [3020,]
             becky_good_peak_freqs = [964, 3155, 3951]
             becky_bad_peak_freqs = [
                 3025,
             ]
         case "ACsb24rearSOAEwfA1.mat":  # 2
-            seth_good_peak_freqs = [1809, 2169, 3112, 3478]
+            seth_good_peak_freqs = [2175, 2498, 3112, 3478,]
+            seth_bad_peak_freqs = [1733, 1814]
             becky_good_peak_freqs = [2175, 2503, 3112, 3478]
             becky_bad_peak_freqs = [1728, 1814]
         case "ACsb30learSOAEwfA2.mat":  # 3
-            seth_good_peak_freqs = [1803, 2137, 2406, 2778]
+            seth_good_peak_freqs = [1798, 2143,]
+            seth_bad_peak_freqs = [2417, 2772, 3052]
             becky_good_peak_freqs = [
                 1798,
                 2143,
@@ -272,62 +276,71 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
 
         # Tokays
         case "tokay_GG1rearSOAEwf.mat":  # 0
-            good_peak_freqs = [
-                1572,
+            seth_good_peak_freqs = [
+                1572, 1717
             ]
-            bad_peak_freqs = [1184, 3214, 3714]
+            seth_bad_peak_freqs = [1184, 3219, 3714]
         case "tokay_GG2rearSOAEwf.mat":  # 1
-            good_peak_freqs = [3176]
-            bad_peak_freqs = [1195, 3876]
+            seth_good_peak_freqs = [1324, 1567, 2896, 3182, ]
+            seth_bad_peak_freqs = [3435, 3876]
         case "tokay_GG3rearSOAEwf.mat":  # 2
-            good_peak_freqs = [1109, 3133]
-            bad_peak_freqs = [1620, 2266]
+            seth_good_peak_freqs = [1109, 1330, 2821, 3133, ]
+            seth_bad_peak_freqs = [1620, 2277]
         case "tokay_GG4rearSOAEwf.mat":  # 3
-            good_peak_freqs = [1104, 2288, 3160]
-            bad_peak_freqs = [2837]
+            seth_good_peak_freqs = [1104, 2288, 3160]
+            seth_bad_peak_freqs = [2842]
 
         # Owls
         case "Owl2R1.mat":  # 0
-            seth_good_peak_freqs = [4355, 7451, 8458, 9039]
+            seth_good_peak_freqs = [8004, 8432,]
+            seth_bad_peak_freqs = [4354, 5572, 5947, 7119, 7453, 9023, 9557]
             becky_good_peak_freqs = [8016, 8450]
             becky_bad_peak_freqs = [4342, 5578, 5953, 7090, 7453, 9035, 9574]
         case "Owl7L1.mat":  # 1
-            seth_good_peak_freqs = [6896, 7941, 8861, 9271]
+            seth_good_peak_freqs = [7898, 7500, 8848,]
+            seth_bad_peak_freqs = [6141, 6838, 8443, 9258, 9785,]
             becky_good_peak_freqs = [7922, 7535, 8854]
             becky_bad_peak_freqs = [6164, 6896, 8426, 9252, 9779]
         case "TAG6rearSOAEwf1.mat":  # 2
-            seth_good_peak_freqs = [5626, 8096, 8484, 9862]
+            seth_good_peak_freqs = [6035, 8096, 8489, 9846,]
+            seth_bad_peak_freqs = [5620]
             becky_good_peak_freqs = [6029, 8102, 8489, 9857]
             becky_bad_peak_freqs = [5626]
         case "TAG9rearSOAEwf2.mat":  # 3
-            seth_good_peak_freqs = [4931, 6993, 7450, 9878]
+            seth_good_peak_freqs = [6966,]
+            seth_bad_peak_freqs = [4910, 6589, 7429,]
             becky_good_peak_freqs = [6977]
             becky_bad_peak_freqs = [3461, 4613, 4920, 6164, 7445, 9846, 10270]
         case "owl_TAG4learSOAEwf1.mat":  # 4
+            seth_good_peak_freqs = [5766, 7181, 9636,]
+            seth_bad_peak_freqs = [4958, 8446, 8834]
             becky_good_peak_freqs = [5771, 7176, 9631]
             becky_bad_peak_freqs = [4958, 8463, 8839]
-            bad_peak_freqs = []
+            
 
         # Humans
         case "ALrearSOAEwf1.mat":  # 0
-            seth_good_peak_freqs = [2665, 2945, 3219, 3865]
+            seth_good_peak_freqs = [2805, 2945, 3865,]
+            seth_bad_peak_freqs = [904, 980, 2659, 3219,]
             becky_good_peak_freqs = [2805, 2945, 3865]
             becky_bad_peak_freqs = [904, 980, 2659, 3219]
         case "JIrearSOAEwf2.mat":  # 1
-            seth_good_peak_freqs = [2342, 3402, 8312, 8678]
+            seth_good_peak_freqs = [2810, 2342, 4048, 5841,]
+            seth_bad_peak_freqs = [3402, 8312, 8678]
             becky_good_peak_freqs = [2342, 4048, 5841]
             becky_bad_peak_freqs = [3402, 8312, 8678]
         case "LSrearSOAEwf1.mat":  # 2
-            seth_good_peak_freqs = [732, 985, 1637, 2229]
+            seth_good_peak_freqs = [732, 985, 1637, 2229,]
+            seth_bad_peak_freqs = [985, 1637, 3122,]
             becky_good_peak_freqs = [732, 2230]
             becky_bad_peak_freqs = [985, 1637, 3122]
         case "TH13RearwaveformSOAE.mat":  # 3
-            seth_good_peak_freqs = [904, 1518, 2040, 2697]
+            seth_good_peak_freqs = [904, 1518, 1674, 2040,]
+            seth_bad_peak_freqs = [2283, 2697,]
             becky_good_peak_freqs = [904, 1518, 2040]
             becky_bad_peak_freqs = [2697]
-    if species not in ["V Sim Human", "Tokay"]:
-        good_peak_freqs = becky_good_peak_freqs
-        bad_peak_freqs = becky_bad_peak_freqs
+    good_peak_freqs = seth_good_peak_freqs
+    bad_peak_freqs = seth_bad_peak_freqs
     return wf, wf_fn, fs, np.array(good_peak_freqs), np.array(bad_peak_freqs)
 
 
@@ -524,14 +537,15 @@ def get_filter_str(filter_meth):
             filter_str = rf"HPF=({filter_meth['cf']}Hz)"
     return filter_str
 
-def get_win_bw(win_meth, tau,  fs, oversample=8, win_bw_thresh_db=3):
-    N = tau * oversample
+def get_win_bw(win_meth, tau,  fs, nfft=None, win_bw_thresh_db=3):
+    if nfft is None:
+        nfft = tau * 8
     win, _ = pc.get_win(win_meth, tau=tau, xi=None)
-    win_psd_db = 10*np.log10(np.abs(rfft(win, N))**2)
+    win_psd_db = 10*np.log10(np.abs(rfft(win, nfft))**2 + 1e-15)
     peak_db = win_psd_db[0]
     target_db = peak_db - win_bw_thresh_db
     
-    idx = np.where(win_psd_db <= target_db)[0]
-    f_win = rfftfreq(N, 1/fs)
+    idx = np.where(win_psd_db <= target_db)[0][0]
+    f_win = rfftfreq(nfft, 1/fs)
     bw = f_win[idx]
     return bw

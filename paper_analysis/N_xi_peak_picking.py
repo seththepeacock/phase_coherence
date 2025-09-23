@@ -6,18 +6,22 @@ from phaseco import *
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences
 
-for species in ['Owl']:
-    for wf_idx in [4]:
-        print(f"Processing {species} {wf_idx}")
+for species in ['Human']:
+    for wf_idx in [3]:
+        if wf_idx == 4 and species != 'Owl':
+            continue
+        
         
         "Get waveform"
-        wf, wf_fn, fs, peak_guesses, bad_fit_freqs = get_wf(species=species, wf_idx=wf_idx)
-        wf_length = len(wf) / fs
+        wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(species=species, wf_idx=wf_idx)
+        print(f"Processing {species} {wf_idx} ({fs}Hz)")
+        wf_len_s = 60
+        wf = crop_wf(wf, fs, wf_len_s)
 
         "PARAMETERS"
         plot = 1
-        tau_s = 2**13 / 44100 # Everyone uses the same tau_s
-        tau = round(tau_s*fs)
+        tau = 2**13
+        # Everyone can use the same tau; slightly less finegrained for owl but it's already way oversampled
         
         max_khzs = {
                         'Anole': 6,
@@ -30,55 +34,58 @@ for species in ['Owl']:
         max_khz = max_khzs[species]
         # Get peak bin indices
         fig_folder = r'N_xi Fits/Auto Peak Picks'
-        fn_id = rf"{species} {wf_idx}, $\tau={tau_s*1000:.0f}$ms, wf_length={wf_length:.3f}s"
+        fn_id = rf"{species} {wf_idx}, $\tau={tau / fs *1000:.0f}$ms, wf_length={wf_len_s:.3f}s"
         f, psd = pc.get_welch(wf=wf, fs=fs, tau=tau)
         
         # Guesses
-        match wf_fn:
-            # V Sim Human
-            case 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat':
-                peak_guesses = [1156, 1246, 1519, 1975]
-            # Anoles
-            case 'AC6rearSOAEwfB1.mat': #0
-                peak_guesses = [1232, 2153, 3710, 4501]
-            case 'ACsb4rearSOAEwf1.mat': #1
-                peak_guesses = [964, 3028, 3160, 3960]
-            case 'ACsb24rearSOAEwfA1.mat': #2    
-                peak_guesses = [1811, 2177, 3109, 3486]
-            case 'ACsb30learSOAEwfA2.mat': #3
-                peak_guesses = [1800, 2139, 2401, 2774]
-            # Tokays
-            case 'tokay_GG1rearSOAEwf.mat':
-                peak_guesses = [1187, 1570, 3218, 3720]
-            case 'tokay_GG2rearSOAEwf.mat':
-                peak_guesses = [1200, 1560, 3180, 3870]
-            case 'tokay_GG3rearSOAEwf.mat':
-                peak_guesses = [1115, 1620, 2270, 3149]
-            case 'tokay_GG4rearSOAEwf.mat':
-                peak_guesses = [1100, 2288, 2840, 3160]
-            # Humans
-            case 'ALrearSOAEwf1.mat': #0
-                peak_guesses = [2660, 2940, 3220, 3870]
-            case 'JIrearSOAEwf2.mat': #1
-                peak_guesses = [2343, 3401, 8312, 8678]
-            case 'LSrearSOAEwf1.mat': #2
-                peak_guesses = [736, 983, 1638, 2225]
-            case 'TH13RearwaveformSOAE.mat': #3
-                peak_guesses = [905, 1522, 2049, 2692]
-            # Owls
-            case 'Owl2R1.mat': #0
-                peak_guesses = [4341, 7456, 8458, 9031]
-            case 'Owl7L1.mat': #1
-                peak_guesses = [6897, 7940, 8854, 9263]
-            case 'TAG6rearSOAEwf1.mat': #2
-                peak_guesses = [5609, 8090, 8492, 9862]
-            case 'TAG9rearSOAEwf2.mat': #3
-                peak_guesses = [4928, 6993, 7450, 9869]
-            case "owl_TAG4learSOAEwf1.mat": #4
-                peak_guesses = [4958, 5771, 7176, 9631]
+        peak_guesses = np.concatenate((good_peak_freqs, bad_peak_freqs))
+        # match wf_fn:
+        #     # V Sim Human
+        #     case 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat':
+        #         peak_guesses = [1156, 1246, 1519, 1975]
+        #     # Anoles
+        #     case 'AC6rearSOAEwfB1.mat': #0
+        #         peak_guesses = [1232, 2153, 3710, 4501]
+        #     case 'ACsb4rearSOAEwf1.mat': #1
+        #         peak_guesses = [964, 3028, 3160, 3960]
+        #     case 'ACsb24rearSOAEwfA1.mat': #2    
+        #         peak_guesses = [2169, 2503, 3112, 3478, 1728, 1809,]
+        #     case 'ACsb30learSOAEwfA2.mat': #3
+        #         peak_guesses = [1800, 2139, 2401, 2774, 3052]
+        #     # Tokays
+        #     case 'tokay_GG1rearSOAEwf.mat': # 0
+        #         peak_guesses = [1184, 1717, 1572, 3214, 3714]
+        #     case 'tokay_GG2rearSOAEwf.mat': # 1
+        #         peak_guesses = [1324, 1565, 2901, 3176, 3450, 3876]
+        #     case 'tokay_GG3rearSOAEwf.mat': # 2
+        #         peak_guesses = [1109, 1322, 2813, 3133, 1620, 2266]
+        #     case 'tokay_GG4rearSOAEwf.mat': # 3
+        #         peak_guesses = [1100, 2288, 2840, 3160]
+        #     # Owls
+        #     case 'Owl2R1.mat': #0
+        #         peak_guesses = [8016, 8458, 4342, 5578, 5953, 7090, 7451, 9031, 9574]
+        #     case 'Owl7L1.mat': #1
+        #         peak_guesses = [7941, 7535, 8861,6164, 8426, 9252, 9779]
+        #     case 'TAG6rearSOAEwf1.mat': #2
+        #         peak_guesses = [6029, 8096, 8484, 9862, 5626, ]
+        #     case 'TAG9rearSOAEwf2.mat': #3
+        #         peak_guesses = [6993, 3461, 4613, 4931, 6164, 7450, 9878, 10270]
+        #     case "owl_TAG4learSOAEwf1.mat": #4
+        #         peak_guesses = [5771, 7176, 9631, 4958, 8463, 8839]
+        #     # Humans
+        #     case 'ALrearSOAEwf1.mat': #0
+        #         peak_guesses = [2805, 2945, 3865, 904, 980, 2665, 3219,]
+        #     case 'JIrearSOAEwf2.mat': #1
+        #         peak_guesses = [2342, 4048, 5841, 3402, 8312, 8678]
+        #     case 'LSrearSOAEwf1.mat': #2
+        #         peak_guesses = [732, 985, 1637, 2229, 985, 1637, 3122]
+        #     case 'TH13RearwaveformSOAE.mat': #3
+        #         peak_guesses = [904, 1518, 2040, 2697]
         
         
-        peak_indices, _ = find_peaks(10*np.log10(psd), prominence=2)
+
+
+        peak_indices, _ = find_peaks(10*np.log10(psd), prominence=1)
         
 
         # # Inspect prominence values of detected peaks
@@ -89,40 +96,47 @@ for species in ['Owl']:
         #     print(f"Peak at f={f[i]:.1f} Hz has prominence {prom:.2f} dB")
 
         
-        picked_peaks = []
-        for peak_guess in peak_guesses:
-            # Start a list with length > 2 to enter a while loop
-            selected_index = [0, 0]
-            bw = 50
-            while len(selected_index) > 1:
-                band = [peak_guess - bw, peak_guess + bw]
-                # Select peaks within the frequency band
-                band_mask = (f[peak_indices] >= band[0]) & (f[peak_indices] <= band[1])
-                # Get all peaks within the frequency band
-                selected_index = peak_indices[band_mask]
-                # Narrow down the bandwidth until there is only one peak
-                bw = bw - 1
-                if bw == 0:
-                    raise ValueError("No nearby peaks -- bad guess?!")
-            peak = f[selected_index[0]]
-            picked_peaks.append(peak)
-    
-        peak_str = ""
-        for peak_freq in picked_peaks:
-            peak_str += f"{peak_freq:.0f}, "
-        peak_str = peak_str[:-2]
-        print(peak_str)
+        
+        for kind, peak_guesses in zip(['good', 'bad'], [good_peak_freqs, bad_peak_freqs]):
+            picked_peaks = []
+            if kind == 'good':
+                print("Good peak freqs:")
+            elif kind == 'bad':
+                print('Bad peak freqs:')
+            for peak_guess in peak_guesses:
+                # print(peak_guess)
+                # Start a list with length > 2 to enter a while loop
+                selected_index = [0, 0]
+                bw = 50
+                while len(selected_index) > 1:
+                    band = [peak_guess - bw, peak_guess + bw]
+                    # Select peaks within the frequency band
+                    band_mask = (f[peak_indices] >= band[0]) & (f[peak_indices] <= band[1])
+                    # Get all peaks within the frequency band
+                    selected_index = peak_indices[band_mask]
+                    # Narrow down the bandwidth until there is only one peak
+                    bw = bw - 1
+                    if bw == 0:
+                        raise ValueError("No nearby peaks -- bad guess?!")
+                peak = f[selected_index[0]]
+                picked_peaks.append(peak)
+        
+            peak_str = ""
+            for peak_freq in picked_peaks:
+                peak_str += f"{peak_freq:.0f}, "
+            print(peak_str)
         if plot:
-            f = np.array(f)
-            picked_peaks = np.array(picked_peaks)
-            peak_idxs = np.argmin(np.abs(f[:, None] - picked_peaks[None, :]), axis=0) 
             plt.close('all')
             plt.figure(figsize=(10, 5))
             plt.suptitle(fn_id)
             plt.title(rf"Power Spectral Density")
-            plt.plot(f, 10*np.log10(psd), label='PSD')
-            for peak_idx in peak_idxs:
-                plt.scatter(f[peak_idx], 10*np.log10(psd[peak_idx]), marker='x', c='r', s=10)
+            plt.plot(f, 10*np.log10(psd), label='PSD', c='k')
+            for c, peak_guesses in zip(['green', 'red'], [good_peak_freqs, bad_peak_freqs]):
+                f = np.array(f)
+                picked_peaks = np.array(peak_guesses)
+                peak_idxs = np.argmin(np.abs(f[:, None] - picked_peaks[None, :]), axis=0) 
+                for peak_idx in peak_idxs:
+                    plt.scatter(f[peak_idx], 10*np.log10(psd[peak_idx]), marker='x', c=c, s=30)
             plt.xlabel("Frequency (Hz)")
             plt.ylabel("PSD [dB]")  
             plt.legend()

@@ -17,7 +17,7 @@ all_species = [
 ]
 speciess = ["Anole"]
 wf_idxs = range(1)
-tau_ss = [2**13 / 44100]
+tau_ss = [0.025]
 win_meths = [
     # {"method": "rho", "rho": 0.7},
     # {"method": "zeta", "zeta": 0.01, "win_type": "hann"},
@@ -27,13 +27,9 @@ win_meths = [
 
 
 # WF pre-processing parameters
-
-# bpf_center_freq = 3710
-# bpf_bandwidth = 250
 filter_meth = {
     "type": "kaiser",
     "cf": 300,
-    # "cf": (bpf_center_freq-bpf_bandwidth, bpf_center_freq+bpf_bandwidth),
     "df": 50,
     "rip": 100,
 }  # cutoff freq (HPF if one value, BPF if two), transition band width, and max allowed ripple (in dB)
@@ -44,26 +40,29 @@ scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde 
 # Coherence Parameters
 pw = True
 wa = False
-hop = 0.2  # proportion of tau
+const_N_pd = 0
+hop = 0.25  # proportion of tau
 xi_min_s = 0.001
 delta_xi_s = xi_min_s
 
-nfft = 2**12
-# check this is greater than the max tau_s * 44100
-while 4800 * max(tau_ss) > nfft:
-    nfft = nfft * 2
-nfft = None
+nfft = 2**13
+# # check this is greater than the max tau_s * 44100
+# while 4800 * max(tau_ss) > nfft:
+#     nfft = nfft * 2
 
-const_N_pd = 0
+# PSD Parameters
+tau_psd = nfft
+
+
 
 # Options for iterating through subjects
 force_recalc_colossogram = 0
-plot_what_we_got = 1
+plot_what_we_got = 0
 only_calc_new_coherences = 0
 
 
 # Fitting Parameters
-noise_freqs = [10000, 20000]
+noise_freqs = [10, 100, 1000, 10000, 20000]
 N_bs = 0  # Num of bootstraps to do to calculate fit func CI (0 = standard, no bootstrapping)
 # mse_thresh = 0.0001 # Decay start is pushed forward xi by xi until MSE thresh falls below this value
 mse_thresh = np.inf
@@ -79,7 +78,7 @@ fit_func = "exp"  # 'exp' or 'gauss'
 
 # Plotting/output parameters
 fits_noise_bin = None
-output_colossogram = 1
+output_colossogram = 0
 output_peak_picks = 1
 output_fits = 1
 output_bad_fits = 1
@@ -91,7 +90,7 @@ show_plots = 0
 # Maximum xi value
 xi_max_ss = {
     # "Anole": 0.1,
-    "Anole": 0.05,
+    "Anole": 0.1,
     "Owl": 0.1,
     "Human": 0.2,
     # "Human": 1.0,
@@ -202,12 +201,17 @@ for win_meth in win_meths:
                 if colossogram.shape[0] != xis_s.shape[0]:
                     colossogram = colossogram.T
 
-                # Get peak bin indices now that we have f
+                # Get peak bin indices now that we have f 
+                    # (this is either the full nfft freq axis or just the short list, works either way)
                 good_peak_idxs = np.argmin(
                     np.abs(f[:, None] - good_peak_freqs[None, :]), axis=0
                 )
                 bad_peak_idxs = np.argmin(
                     np.abs(f[:, None] - bad_peak_freqs[None, :]), axis=0
+                )
+
+                f0_idxs = np.argmin(
+                    np.abs(f[:, None] - f0s[None, :]), axis=0
                 )
 
                 "Make more directories"
@@ -225,6 +229,18 @@ for win_meth in win_meths:
                 "Plots"
                 suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{wf_len_s}s WF]   {method_id}"
                 f_khz = f / 1000
+                colors = [
+                            "#1f77b4",
+                            "#ff7f0e",
+                            "#2ca02c",
+                            "#d62728",
+                            "#9467bd",
+                            "#8c564b",
+                            "#e377c2",
+                            "#7f7f7f",
+                            "#bcbd22",
+                            "#126290",
+                        ]
                 if output_colossogram:
                     print("Plotting Colossogram")
                     plt.close("all")
@@ -258,45 +274,57 @@ for win_meth in win_meths:
 
                 if output_peak_picks:
                     print("Plotting Peak Picks")
-                    wf = filter_wf(wf, fs, filter_meth, species)
-                    target_xi = xi_max_s / 10
-                    xi_idx = np.argmin(np.abs(xis_s - target_xi))
+                    # See if we need to preprocess waveform
+                    if wf_pp is None:
+                        wf = crop_wf(wf, fs, wf_len_s)
+                        wf = filter_wf(wf, fs, filter_meth, species)
+                        if species in ["Anole", "Human"] and scale:  # Scale wf
+                            wf = scale_wf(wf)
+                    else:
+                        wf = wf_pp
+
+                    # Calculate arrays for plotting
+                    target_xi_s = 0.01
+                    xi_idx = np.argmin(np.abs(xis_s - target_xi_s))
                     coherence_slice = colossogram[xi_idx, :]
-                    psd = pc.get_welch(wf=wf, fs=fs, tau=tau)[1]
+                    f_psd, psd = pc.get_welch(wf=wf, fs=fs, tau=tau_psd)
                     psd_db = 10 * np.log10(psd)
+                    f_psd_khz = f_psd / 1000
+                    f0_idxs_psd = np.argmin(np.abs(f0s[:, None] - f_psd[None, :]), axis=1)
+
+                    # Initialize plot
                     plt.close("all")
                     plt.figure(figsize=(11, 8))
                     plt.suptitle(suptitle)
+
                     # Coherence slice plot
                     plt.subplot(2, 1, 1)
                     plt.title(rf"Colossogram Slice at $\xi={xis_s[xi_idx]:.3f}$")
                     plt.plot(
-                        f_khz, coherence_slice, label=r"$C_{\xi}$, $\xi={target_xi}$"
+                        f_khz, coherence_slice, label=r"$C_{\xi}$, $\xi={target_xi}$", color='k'
                     )
-                    for f0_idx in good_peak_idxs:
-                        plt.scatter(f_khz[f0_idx], coherence_slice[f0_idx], c="r")
+                    for f0_idx, color in zip(good_peak_idxs, colors):
+                        plt.scatter(f_khz[f0_idx], coherence_slice[f0_idx], c=color)
                     plt.xlabel("Frequency (kHz)")
                     plt.ylabel(r"$C_{\xi}$")
                     plt.xlim(0, max_khz)
+
                     # PSD plot
                     plt.subplot(2, 1, 2)
                     plt.title(rf"Power Spectral Density")
-                    plt.plot(f_khz, psd, label="PSD")
-                    # Color chosen peaks based on the STFT filtering
+                    plt.plot(f_psd_khz, psd_db, label="PSD", color='k')
                     
-                    if win_meth['method'] == 'static':   
-                        start = time.time()
-                        bw = get_win_bw(win_meth, tau, fs, oversample = tau*8, win_bw_thresh_db = 3)
-                        bin_width = 1/tau_s
-                        bw_bins = round(bw / bin_width)
-                        stop = time.time()
-                        print(f"{stop}-{start}")
-                        for f0_idx in f0s:
-                            plt.plot(f_khz[f0_idx-bw_bins:f0_idx+bw_bins], psd_db[f0_idx-bw_bins:f0_idx+bw_bins], )
-                    # If it's not static, we just mark with dots
-                    else:
-                        for f0_idx in f0s:
-                            plt.scatter(f_khz[f0_idx], 10 * np.log10(psd[f0_idx]), c="r")
+                    for f0_idx_psd, color in zip(f0_idxs_psd, colors):
+                        plt.scatter(f_psd_khz[f0_idx_psd], psd_db[f0_idx_psd], c=color)
+                    
+                    if win_meth['method'] == 'static':  
+                        # Color chosen peaks based on the STFT filtering 
+                        bw_hz = get_win_bw(win_meth, tau, fs, nfft=tau_psd, win_bw_thresh_db = 3)
+                        psd_bin_width_hz = 1/(tau_psd / fs)
+                        bw_psd_bins = int(round(bw_hz / psd_bin_width_hz))
+                        for f0_idx_psd, color in zip(f0_idxs_psd, colors):
+                            plt.plot(f_psd_khz[f0_idx_psd-bw_psd_bins:f0_idx_psd+bw_psd_bins], psd_db[f0_idx_psd-bw_psd_bins:f0_idx_psd+bw_psd_bins], c=color)
+                        
                     plt.xlabel("Frequency (kHz)")
                     plt.ylabel("PSD [dB]")
                     plt.legend()
@@ -340,18 +368,7 @@ for win_meth in win_meths:
                         plt.close("all")
                         plt.figure(figsize=(15, 10))
                         plt.suptitle(f"{suptitle}   [SWP={sigma_weighting_power}]")
-                        colors = [
-                            "#1f77b4",
-                            "#ff7f0e",
-                            "#2ca02c",
-                            "#d62728",
-                            "#9467bd",
-                            "#8c564b",
-                            "#e377c2",
-                            "#7f7f7f",
-                            "#bcbd22",
-                            "#126290",
-                        ]
+                        
                         for f0, f0_idx, color, subplot_idx in zip(
                             peak_freqs, peak_idxs, colors, [1, 2, 3, 4]
                         ):
