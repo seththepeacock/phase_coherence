@@ -15,8 +15,6 @@ from scipy.fft import rfft, rfftfreq
 from tqdm import tqdm
 
 
-
-
 def load_calc_colossogram(
     wf,
     wf_idx,
@@ -29,7 +27,6 @@ def load_calc_colossogram(
     paper_analysis_folder,
     pw,
     tau,
-    tau_s,
     nfft,
     xi_min_s,
     xi_max_s,
@@ -45,29 +42,28 @@ def load_calc_colossogram(
     f0s,
     wa,
 ):
-    # Handle defaults
-    if tau_s is None:
-        tau_s = tau / fs
-
-    # Define these, otherwise the old way loading will be mad
-    snapping_rhortle = np.nan
-    rho = np.nan
-
     filter_str = get_filter_str(filter)
 
-    win_meth_str = get_win_meth_str(win_meth)
+    win_meth_str = pc.get_win_meth_str(win_meth)
 
     # Build strings
+
+    # Convert for strings
+    tau_ms = 1000 * tau / fs
+    hop_ms = 1000 * hop / fs if hop > 1 else 1000 * round(hop * tau) / fs
     N_bs_str = "" if N_bs == 0 else f"N_bs={N_bs}, "
     pw_str = f"{pw}" if not wa or not pw else "WA"
-    const_N_pd_str = "" if const_N_pd else 'N_pd=max, '
-    f0s_str = "" if f0s is None else f"f0s={np.array2string(f0s, formatter={'float' : lambda x: "%.0f" % x})}, "
+    const_N_pd_str = "" if const_N_pd else "N_pd=max, "
+    f0s_str = (
+        ""
+        if f0s is None
+        else f"f0s={np.array2string(f0s, formatter={'float' : lambda x: "%.0f" % x})}, "
+    )
     nfft_str = "" if nfft is None else f"nfft={nfft}, "
-    delta_xi_str = "" if xi_min_s == 0.001 else f'delta_xi={xi_min_s*1000:.0f}ms, '
-    hop_str = f'hop={(hop/fs)*1000:.0f}ms' if hop > 1 else f'hop={(round(hop * tau)/fs)*1000:.0f}ms'
-    fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, {hop_str}, tau={tau_s*1000:.0f}ms, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+    delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.0f}ms, "
+    hop_str = f"hop={hop_ms:.0f}ms"
+    fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, {hop_str}, tau={tau_ms:.0f}ms, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{fn_id} (Colossogram)"
-    # print(f"Processing {species} {wf_idx} ({win_meth_str}, PW={pw_str}, tau={tau_s*1000:.2f}ms, N_bs={N_bs})")
     print(f"Processing {fn_id}")
     # Convert to samples
     xi_min = round(xi_min_s * fs)
@@ -77,113 +73,63 @@ def load_calc_colossogram(
     pkl_folder = paper_analysis_folder + "Pickles/"
     pkl_fp = pkl_folder + pkl_fn + ".pkl"
     os.makedirs(pkl_folder, exist_ok=True)
-    print(pkl_fp)
 
     if os.path.exists(pkl_fp) and not force_recalc_colossogram:
         with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
             (colossogram_dict) = pickle.load(file)
         if only_calc_new_coherences:
             colossogram_dict["only_calc_new_coherences"] = 1
-        colossogram_dict['fn_id'] = fn_id
+        colossogram_dict["fn_id"] = fn_id
         with open(pkl_fp, "wb") as file:
-           pickle.dump(colossogram_dict, file)
-        
+            pickle.dump(colossogram_dict, file)
 
-    # Then, try to load in the old way
     else:
-        PW_str = f"PW={pw}, " if pw else ""
-        fn_id_old = rf"{species} {wf_idx}, {PW_str}const_Npd={const_N_pd}, dense_stft=1, rho={rho}, snapping_rhortle={snapping_rhortle}, tau={tau_s*1000:.0f}ms, max_xi={xi_max_s}, wf_length={wf_len_s}s, HPF={filter_str}, wf={wf_fn.split('.')[0]}"
-        pkl_fn_old = f"{fn_id_old} (Coherences)"
-        pkl_folder_old = paper_analysis_folder + r"Pickles/Old Pickles/"
-        os.makedirs(pkl_folder_old, exist_ok=True)
-
-        # Get colossogram if they exist in the old way (and we're not forcing a recalc)
+        # Now, we know they don't exist as pickles new or old, so we recalculate
         if (
-            os.path.exists(pkl_folder_old + pkl_fn_old + ".pkl")
-            and not force_recalc_colossogram
-        ):
-            with open(pkl_folder_old + pkl_fn_old + ".pkl", "rb") as file:
-                (
-                    colossogram,
-                    f,
-                    xis_s,
-                    tau_s,
-                    rho,
-                    N_pd_min,
-                    N_pd_max,
-                    hop_s,
-                    snapping_rhortle,
-                    wf_fn,
-                    species,
-                ) = pickle.load(file)
-            colossogram_dict = {
-                "colossogram": colossogram,
-                "f": f,
-                "xis_s": xis_s,
-                "tau_s": tau_s,
-                "tau": round(tau_s * fs),
-                "rho": rho,
-                "N_pd_min": N_pd_min,
-                "N_pd_max": N_pd_max,
-                "hop": round(hop_s * fs),
-                "hop_s": hop_s,
-                "snapping_rhortle": snapping_rhortle,
-                "wf_fn": wf_fn,
-                "species": species,
-                "fn_id": fn_id,
-                "win_meth_str": win_meth_str,
-                "filter_str": filter_str,
-            }
-            if only_calc_new_coherences:
-                colossogram_dict["only_calc_new_coherences"] = 1
+            plot_what_we_got
+        ):  # Unless plot_what we got, in which case we just end the func here
+            return {"plot_what_we_got": 1}, wf_pp
+
+        # First, process the wf (unless it's already processed)
+        if wf_pp is None:
+            if species in ["Anole", "Human"] and scale:  # Scale wf
+                wf = scale_wf(wf)
+
+            # Crop wf
+            wf_cropped = crop_wf(wf, fs, wf_len_s)
+
+            # Apply filter
+            wf_pp = filter_wf(wf_cropped, fs, filter, species)
+        # If it's already been processed and passed in, just use it
         else:
-            # Now, we know they don't exist as pickles new or old, so we recalculate
-            if (
-                plot_what_we_got
-            ):  # Unless plot_what we got, in which case we just end the func here
-                return {"plot_what_we_got": 1}, wf_pp
-            
-            # First, process the wf (unless it's already processed)
-            if wf_pp is None:            
-                if species in ["Anole", "Human"] and scale:  # Scale wf
-                    wf = scale_wf(wf)
+            print("Calculating colossogram with prefiltered waveform!")
 
-                # Crop wf
-                wf_cropped = crop_wf(wf, fs, wf_len_s)
+        # Then get colossogram!
+        colossogram_dict = pc.get_colossogram(
+            wf_pp,
+            fs,
+            xis={"xi_min": xi_min, "xi_max": xi_max, "delta_xi": xi_min},
+            hop=hop,
+            tau=tau,
+            nfft=nfft,
+            win_meth=win_meth,
+            pw=pw,
+            const_N_pd=const_N_pd,
+            global_xi_max_s=global_xi_max_s,
+            N_bs=N_bs,
+            f0s=f0s,
+            return_dict=True,
+        )
+        # Add some extra keys
+        extra_keys = {
+            "fn_id": fn_id,
+            "win_meth_str": win_meth_str,
+            "filter_str": filter_str,
+        }
+        colossogram_dict.update(extra_keys)
 
-                # Apply filter
-                wf_pp = filter_wf(wf_cropped, fs, filter, species)
-            # If it's already been processed and passed in, just use it
-            else:
-                print("Calculating colossogram with prefiltered waveform!")
-
-
-            # Then get colossogram!
-            colossogram_dict = pc.get_colossogram(
-                wf_pp,
-                fs,
-                xis={"xi_min": xi_min, "xi_max": xi_max, "delta_xi": xi_min},
-                hop=hop,
-                tau=tau,
-                nfft=nfft,
-                win_meth=win_meth,
-                pw=pw,
-                const_N_pd=const_N_pd,
-                global_xi_max_s=global_xi_max_s,
-                N_bs=N_bs,
-                f0s=f0s,
-                return_dict=True,
-            )
-            # Add some extra keys
-            extra_keys = {
-                "fn_id": fn_id,
-                "win_meth_str": win_meth_str,
-                "filter_str": filter_str,
-            }
-            colossogram_dict.update(extra_keys)
-
-            with open(pkl_folder + pkl_fn + ".pkl", "wb") as file:
-                pickle.dump(colossogram_dict, file)
+        with open(pkl_folder + pkl_fn + ".pkl", "wb") as file:
+            pickle.dump(colossogram_dict, file)
     # We now have colossogram_dict either from a saved pickle (new or old) or from the calculation; return it!
     return colossogram_dict, wf_pp
 
@@ -249,25 +195,31 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             seth_bad_peak_freqs = []
         # Anoles
         case "AC6rearSOAEwfB1.mat":  # 0
-            seth_good_peak_freqs = [1233, 2153, 3704, 4500]
+            seth_good_peak_freqs = [1233, 2153, 3704, 4500,]
             seth_bad_peak_freqs = []
             becky_good_peak_freqs = [1233, 2164, 3709, 4506]
             becky_bad_peak_freqs = []
         case "ACsb4rearSOAEwf1.mat":  # 1
-            seth_good_peak_freqs = [964, 3155, 3951]
-            seth_bad_peak_freqs = [3020,]
+            seth_good_peak_freqs = [964, 2729, 3155, 3946,]
+            seth_bad_peak_freqs = [
+                3025,
+            ]
             becky_good_peak_freqs = [964, 3155, 3951]
             becky_bad_peak_freqs = [
                 3025,
             ]
         case "ACsb24rearSOAEwfA1.mat":  # 2
-            seth_good_peak_freqs = [2175, 2498, 3112, 3478,]
-            seth_bad_peak_freqs = [1733, 1814]
+            seth_good_peak_freqs = [
+                2175, 2498, 3117, 3478,
+            ]
+            seth_bad_peak_freqs = [1733, 1814,]
             becky_good_peak_freqs = [2175, 2503, 3112, 3478]
             becky_bad_peak_freqs = [1728, 1814]
         case "ACsb30learSOAEwfA2.mat":  # 3
-            seth_good_peak_freqs = [1798, 2143,]
-            seth_bad_peak_freqs = [2417, 2772, 3052]
+            seth_good_peak_freqs = [
+                1798, 2143,
+            ]
+            seth_bad_peak_freqs = [2417, 2778, 3047,]
             becky_good_peak_freqs = [
                 1798,
                 2143,
@@ -276,67 +228,98 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
 
         # Tokays
         case "tokay_GG1rearSOAEwf.mat":  # 0
-            seth_good_peak_freqs = [
-                1572, 1717
-            ]
-            seth_bad_peak_freqs = [1184, 3219, 3714]
+            seth_good_peak_freqs = [1572, 1717,]
+            seth_bad_peak_freqs = [1184, 3219, 3714,]
         case "tokay_GG2rearSOAEwf.mat":  # 1
-            seth_good_peak_freqs = [1324, 1567, 2896, 3182, ]
-            seth_bad_peak_freqs = [3435, 3876]
+            seth_good_peak_freqs = [
+               1324, 1567, 2896, 3182,
+            ]
+            seth_bad_peak_freqs = [3435, 3876,]
         case "tokay_GG3rearSOAEwf.mat":  # 2
-            seth_good_peak_freqs = [1109, 1330, 2821, 3133, ]
-            seth_bad_peak_freqs = [1620, 2277]
+            seth_good_peak_freqs = [
+                1109, 1330, 2821, 3144,
+            ]
+            seth_bad_peak_freqs = [1620, 2272,]
         case "tokay_GG4rearSOAEwf.mat":  # 3
-            seth_good_peak_freqs = [1104, 2288, 3160]
-            seth_bad_peak_freqs = [2842]
+            seth_good_peak_freqs = [1104, 2288, 3160,]
+            seth_bad_peak_freqs = [2848,]
 
         # Owls
         case "Owl2R1.mat":  # 0
-            seth_good_peak_freqs = [8004, 8432,]
-            seth_bad_peak_freqs = [4354, 5572, 5947, 7119, 7453, 9023, 9557]
+            seth_good_peak_freqs = [
+                8010, 8432,
+            ]
+            seth_bad_peak_freqs = [
+                4354, 5572, 5947, 7102, 7453, 9029, 9586,
+            ]
             becky_good_peak_freqs = [8016, 8450]
             becky_bad_peak_freqs = [4342, 5578, 5953, 7090, 7453, 9035, 9574]
         case "Owl7L1.mat":  # 1
-            seth_good_peak_freqs = [7898, 7500, 8848,]
-            seth_bad_peak_freqs = [6141, 6838, 8443, 9258, 9785,]
+            seth_good_peak_freqs = [
+                7893, 7500, 8836,
+            ]
+            seth_bad_peak_freqs = [
+                6141, 6838, 8443, 9258, 9791,
+            ]
             becky_good_peak_freqs = [7922, 7535, 8854]
             becky_bad_peak_freqs = [6164, 6896, 8426, 9252, 9779]
         case "TAG6rearSOAEwf1.mat":  # 2
-            seth_good_peak_freqs = [6035, 8096, 8489, 9846,]
-            seth_bad_peak_freqs = [5620]
+            seth_good_peak_freqs = [
+               6035, 8096, 8484, 9868,
+            ]
+            seth_bad_peak_freqs = [5626,]
             becky_good_peak_freqs = [6029, 8102, 8489, 9857]
             becky_bad_peak_freqs = [5626]
         case "TAG9rearSOAEwf2.mat":  # 3
-            seth_good_peak_freqs = [6966,]
-            seth_bad_peak_freqs = [4910, 6589, 7429,]
+            seth_good_peak_freqs = [
+                6966,
+            ]
+            seth_bad_peak_freqs = [
+                4926, 6589, 7429, 9760,
+            ]
             becky_good_peak_freqs = [6977]
             becky_bad_peak_freqs = [3461, 4613, 4920, 6164, 7445, 9846, 10270]
         case "owl_TAG4learSOAEwf1.mat":  # 4
-            seth_good_peak_freqs = [5766, 7181, 9636,]
-            seth_bad_peak_freqs = [4958, 8446, 8834]
+            seth_good_peak_freqs = [
+                5766, 7181, 9636,
+            ]
+            seth_bad_peak_freqs = [4947, 8446, 8834,]
             becky_good_peak_freqs = [5771, 7176, 9631]
             becky_bad_peak_freqs = [4958, 8463, 8839]
-            
 
         # Humans
         case "ALrearSOAEwf1.mat":  # 0
-            seth_good_peak_freqs = [2805, 2945, 3865,]
-            seth_bad_peak_freqs = [904, 980, 2659, 3219,]
+            seth_good_peak_freqs = [
+                2805, 2945, 3865,
+            ]
+            seth_bad_peak_freqs = [
+                904, 980, 2665, 3219,
+            ]
             becky_good_peak_freqs = [2805, 2945, 3865]
             becky_bad_peak_freqs = [904, 980, 2659, 3219]
         case "JIrearSOAEwf2.mat":  # 1
-            seth_good_peak_freqs = [2810, 2342, 4048, 5841,]
-            seth_bad_peak_freqs = [3402, 8312, 8678]
+            seth_good_peak_freqs = [
+                2810, 2342, 4048, 5841,
+            ]
+            seth_bad_peak_freqs = [3402, 8312, 8678,]
             becky_good_peak_freqs = [2342, 4048, 5841]
             becky_bad_peak_freqs = [3402, 8312, 8678]
         case "LSrearSOAEwf1.mat":  # 2
-            seth_good_peak_freqs = [732, 985, 1637, 2229,]
-            seth_bad_peak_freqs = [985, 1637, 3122,]
+            seth_good_peak_freqs = [
+                732, 985, 1637, 2229,
+            ]
+            seth_bad_peak_freqs = [
+                985, 1637, 3122,
+            ]
             becky_good_peak_freqs = [732, 2230]
             becky_bad_peak_freqs = [985, 1637, 3122]
         case "TH13RearwaveformSOAE.mat":  # 3
-            seth_good_peak_freqs = [904, 1518, 1674, 2040,]
-            seth_bad_peak_freqs = [2283, 2697,]
+            seth_good_peak_freqs = [
+                904, 1518, 1674, 2040,
+            ]
+            seth_bad_peak_freqs = [
+                2283, 2697,
+            ]
             becky_good_peak_freqs = [904, 1518, 2040]
             becky_bad_peak_freqs = [2697]
     good_peak_freqs = seth_good_peak_freqs
@@ -364,7 +347,9 @@ def filter_wf(wf, fs, filter_meth, species):
             case "spectral":
                 wf = spectral_filter(wf, fs, filter_meth["cf"], type="hp")
             case "kaiser":
-                wf = kaiser_filter(wf, fs, filter_meth["cf"], filter_meth["df"], filter_meth["rip"])
+                wf = kaiser_filter(
+                    wf, fs, filter_meth["cf"], filter_meth["df"], filter_meth["rip"]
+                )
             case _:
                 raise ValueError(f"{filter_meth['type']} is not a valid HPF type!")
     return wf
@@ -525,8 +510,9 @@ def kaiser_filter(wf, fs, cf=300, df=50, rip=100):
     return filtered_wf
 
 
-
 def get_filter_str(filter_meth):
+    if filter_meth is None:
+        return "filter=None"
     match filter_meth["type"]:
         case "kaiser":
             if not isinstance(filter_meth["cf"], tuple):
@@ -537,15 +523,15 @@ def get_filter_str(filter_meth):
             filter_str = rf"HPF=({filter_meth['cf']}Hz)"
     return filter_str
 
-def get_win_bw(win_meth, tau,  fs, nfft=None, win_bw_thresh_db=3):
+
+def get_win_hpbw(win_meth, tau, fs, nfft=None):
     if nfft is None:
         nfft = tau * 8
     win, _ = pc.get_win(win_meth, tau=tau, xi=None)
-    win_psd_db = 10*np.log10(np.abs(rfft(win, nfft))**2 + 1e-15)
-    peak_db = win_psd_db[0]
-    target_db = peak_db - win_bw_thresh_db
-    
-    idx = np.where(win_psd_db <= target_db)[0][0]
-    f_win = rfftfreq(nfft, 1/fs)
-    bw = f_win[idx]
-    return bw
+    win_psd = np.abs(rfft(win, nfft)) ** 2
+    target = np.max(win_psd) / 2
+
+    idx = np.where(win_psd <= target)[0][0]
+    f_win = rfftfreq(nfft, 1 / fs)
+    hpbw = f_win[idx] * 2
+    return hpbw

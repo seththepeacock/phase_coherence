@@ -5,9 +5,9 @@ import phaseco as pc
 from phaseco import *
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences
-
-for species in ['Human']:
-    for wf_idx in [3]:
+ 
+for species in ['Anole','Tokay', 'Owl', 'Human']:
+    for wf_idx in range(5):
         if wf_idx == 4 and species != 'Owl':
             continue
         
@@ -19,8 +19,9 @@ for species in ['Human']:
         wf = crop_wf(wf, fs, wf_len_s)
 
         "PARAMETERS"
-        plot = 1
+        plot = 0
         tau = 2**13
+        win_type = 'hann'
         # Everyone can use the same tau; slightly less finegrained for owl but it's already way oversampled
         
         max_khzs = {
@@ -35,7 +36,7 @@ for species in ['Human']:
         # Get peak bin indices
         fig_folder = r'N_xi Fits/Auto Peak Picks'
         fn_id = rf"{species} {wf_idx}, $\tau={tau / fs *1000:.0f}$ms, wf_length={wf_len_s:.3f}s"
-        f, psd = pc.get_welch(wf=wf, fs=fs, tau=tau)
+        f, psd = pc.get_welch(wf=wf, fs=fs, tau=tau, win=win_type)
         
         # Guesses
         peak_guesses = np.concatenate((good_peak_freqs, bad_peak_freqs))
@@ -44,7 +45,7 @@ for species in ['Human']:
         #     case 'longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat':
         #         peak_guesses = [1156, 1246, 1519, 1975]
         #     # Anoles
-        #     case 'AC6rearSOAEwfB1.mat': #0
+        #     case 'AC6rearSOAEwfB1.mat': #0 
         #         peak_guesses = [1232, 2153, 3710, 4501]
         #     case 'ACsb4rearSOAEwf1.mat': #1
         #         peak_guesses = [964, 3028, 3160, 3960]
@@ -84,10 +85,8 @@ for species in ['Human']:
         
         
 
-
-        peak_indices, _ = find_peaks(10*np.log10(psd), prominence=1)
-        
-
+        psd_db = 10*np.log10(psd)
+        peak_indices, _ = find_peaks(psd_db, prominence=1, distance=5)
         # # Inspect prominence values of detected peaks
         # prominences = peak_prominences(10*np.log10(psd), peak_indices)[0]
 
@@ -96,47 +95,36 @@ for species in ['Human']:
         #     print(f"Peak at f={f[i]:.1f} Hz has prominence {prom:.2f} dB")
 
         
-        
-        for kind, peak_guesses in zip(['good', 'bad'], [good_peak_freqs, bad_peak_freqs]):
+        f = np.array(f)
+        if plot:
+            plt.close('all')
+            plt.figure(figsize=(10, 5))
+            plt.suptitle(fn_id)
+            plt.title(rf"Power Spectral Density")
+            plt.plot(f, psd_db, label='PSD', c='k')
+            
+        for kind, c, peak_guesses in zip(['good', 'bad'], ['g', 'r'], [good_peak_freqs, bad_peak_freqs]):
             picked_peaks = []
             if kind == 'good':
                 print("Good peak freqs:")
             elif kind == 'bad':
                 print('Bad peak freqs:')
             for peak_guess in peak_guesses:
-                # print(peak_guess)
-                # Start a list with length > 2 to enter a while loop
-                selected_index = [0, 0]
-                bw = 50
-                while len(selected_index) > 1:
-                    band = [peak_guess - bw, peak_guess + bw]
-                    # Select peaks within the frequency band
-                    band_mask = (f[peak_indices] >= band[0]) & (f[peak_indices] <= band[1])
-                    # Get all peaks within the frequency band
-                    selected_index = peak_indices[band_mask]
-                    # Narrow down the bandwidth until there is only one peak
-                    bw = bw - 1
-                    if bw == 0:
-                        raise ValueError("No nearby peaks -- bad guess?!")
-                peak = f[selected_index[0]]
+                # Find index of nearest true peak
+                nearest_idx = np.argmin(np.abs(f[peak_indices] - peak_guess))
+                
+                f_picked_peak_idx = peak_indices[nearest_idx]
+                peak = f[f_picked_peak_idx]
                 picked_peaks.append(peak)
-        
+                if plot:
+                    plt.scatter(f[f_picked_peak_idx], psd_db[f_picked_peak_idx], marker='x', c=c, s=30)
+            picked_peaks = np.array(picked_peaks)
             peak_str = ""
             for peak_freq in picked_peaks:
                 peak_str += f"{peak_freq:.0f}, "
             print(peak_str)
+            
         if plot:
-            plt.close('all')
-            plt.figure(figsize=(10, 5))
-            plt.suptitle(fn_id)
-            plt.title(rf"Power Spectral Density")
-            plt.plot(f, 10*np.log10(psd), label='PSD', c='k')
-            for c, peak_guesses in zip(['green', 'red'], [good_peak_freqs, bad_peak_freqs]):
-                f = np.array(f)
-                picked_peaks = np.array(peak_guesses)
-                peak_idxs = np.argmin(np.abs(f[:, None] - picked_peaks[None, :]), axis=0) 
-                for peak_idx in peak_idxs:
-                    plt.scatter(f[peak_idx], 10*np.log10(psd[peak_idx]), marker='x', c=c, s=30)
             plt.xlabel("Frequency (Hz)")
             plt.ylabel("PSD [dB]")  
             plt.legend()
