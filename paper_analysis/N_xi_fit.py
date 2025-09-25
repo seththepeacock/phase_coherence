@@ -17,22 +17,19 @@ all_species = [
     "Tokay",
 ]
 speciess = all_species
-wf_idxs = range(5)
+wf_idxs = [2]
 bws = [50]
 win_meth = {"method": "rho", "win_type": "flattop", "rho": 1.0}
 
 
 # WF pre-processing parameters
-# filter_meths = [
-#     None,
-#     # {
-#     #     "type": "kaiser",
-#     #     "cf": 300,
-#     #     "df": 50,
-#     #     "rip": 100,
-#     # },
-# ]
 filter_meth = None
+filter_meth = {
+        "type": "kaiser",
+        "cf": 300,
+        "df": 50,
+        "rip": 100,
+    }
 # cutoff freq (HPF if one value, BPF if two), transition band width, and max allowed ripple (in dB)
 wf_len_s = 60  # Will crop waveform to this length (in seconds)
 scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde of vertical shift on PSD;
@@ -42,8 +39,6 @@ scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde 
 pw = True
 wa = False
 const_N_pd = 0
-hop = 0.2  # proportion of tau
-hop_s = None
 xi_min_s = 0.001
 delta_xi_s = xi_min_s
 nfft = 2**13
@@ -79,14 +74,15 @@ output_colossogram = 1
 output_peak_picks = 1
 output_fits = 1
 output_bad_fits = 1
-output_spreadsheet = 1
+output_spreadsheet = 0
 show_plots = 0
+force_all_freqs = True
 
 # Species specific params
 
 # Maximum xi value
 xi_max_ss = {
-    "Anole": 0.1,
+    "Anole": 0.1, 
     "Owl": 0.1,
     "Human": 1.0,
     "V Sim Human": 0.2,
@@ -126,18 +122,13 @@ for pw in [True, False]:
                     all_sel_freqs = np.concat(
                         (good_peak_freqs, bad_peak_freqs, noise_freqs)
                     )
+                    f0s_cgram = None if output_colossogram or force_all_freqs else all_sel_freqs
                     # Get precalculated tau for this bandwidth
                     tau = get_precalc_tau_from_bw(bw, fs, win_meth['win_type'])
 
                     # Check we haven't exceeded our max set by nfft
                     if tau > nfft:
                         raise ValueError(f"Can't have tau = {tau} > {nfft} = nfft!")
-
-                    # # Convert to samples
-                    # if hop_s is not None:
-                    #     hop = round(hop_s * fs)
-                    # if tau_s is not None:
-                    #     tau = round(tau_s*fs)
 
                     # Process species-specific params
                     decay_start_limit_xi_s = None  # Defaults to 25% of the waveform
@@ -150,7 +141,6 @@ for pw in [True, False]:
                     "Calculate/load things"
                     # This will either load it if it's there or calculate it (and pickle it) if not
                     paper_analysis_folder = r"paper_analysis/"
-                    f0s_cgram = None if output_colossogram else all_sel_freqs
                     cgram, wf_pp = load_calc_colossogram(
                         wf,
                         wf_idx,
@@ -192,7 +182,6 @@ for pw in [True, False]:
                     xis_s = cgram["xis_s"]
                     N_pd_min = cgram["N_pd_min"]
                     N_pd_max = cgram["N_pd_max"]
-                    hop = cgram["hop"]
                     method_id = cgram["method_id"]
 
                     # Handle transpose from old way
@@ -240,9 +229,9 @@ for pw in [True, False]:
                     delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.0f}ms, "
                     bw_str = f"HPBW={bw}Hz" if bw is not None else f"tau={1000 * tau / fs:.0f}ms"
                     filter_str = get_filter_str(filter_meth)
-                    plot_fn_id = rf"{species} {wf_idx}, {bw_str}, hop={hop/tau:.2g}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}PW={pw_str}, {win_meth_str}, wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+                    plot_fn_id = rf"{species} {wf_idx}, {bw_str}, hop={hop:.2g}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}PW={pw_str}, {win_meth_str}, wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
                     
-                    suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [HPBW={bw}Hz]   {method_id}"
+                    suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [HPBW={bw}Hz]   {method_id}   [{filter_str}]"
                     f_khz = f / 1000
                     good_colors = [
                         "#1f77b4",
@@ -264,6 +253,7 @@ for pw in [True, False]:
                             xis_s,
                             f,
                             colossogram,
+                            pw=pw,
                             cmap="magma",
                         )
                         plt.title(rf"Colossogram")
@@ -362,7 +352,7 @@ for pw in [True, False]:
                                 )
                                 f0_khz = f_psd_khz[peak_idx_psd]
                                 # Color according to bandwidth
-                                a, b = f0_khz - bw_khz, f0_khz + bw_khz
+                                a, b = f0_khz - bw_khz/2, f0_khz + bw_khz/2
 
                                 # Interpolate so you get exact endpoints
                                 ya = np.interp(a, f_psd_khz, psd_db)
@@ -440,6 +430,7 @@ for pw in [True, False]:
                                     A_const=A_const,
                                     noise_floor_bw_factor=noise_floor_bw_factor,
                                     fit_func=fit_func,
+                                    pw=pw,
                                 )
 
                                 # Unpack dictionary
@@ -498,9 +489,9 @@ for pw in [True, False]:
                             # fits_mod_str = f' (A_const={A_const})'
                             fits_mod_str = ""
                             fits_str = (
-                                f"Fits{fits_mod_str}"
+                                f"Fits [Good]{fits_mod_str}"
                                 if good_peaks
-                                else f"Bad Fits{fits_mod_str}"
+                                else f"Fits [Bad]{fits_mod_str}"
                             )
                             for folder in [results_folder, all_results_folder]:
                                 os.makedirs(rf"{folder}/{fits_str}", exist_ok=True)

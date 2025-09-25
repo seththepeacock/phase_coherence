@@ -58,7 +58,9 @@ def load_calc_colossogram(
         else f"f0s={np.array2string(f0s, formatter={'float' : lambda x: "%.0f" % x})}, "
     )
     nfft_str = "" if nfft is None else f"nfft={nfft}, "
-    delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.0f}ms, "
+    delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.2g}ms, "
+    if hop < 1:
+        hop = int(round(hop*tau))
     pkl_fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, hop={hop}, tau={tau}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{pkl_fn_id} (Colossogram)"
     print(f"Processing {pkl_fn_id}")
