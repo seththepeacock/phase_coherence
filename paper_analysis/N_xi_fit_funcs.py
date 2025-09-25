@@ -4,7 +4,7 @@ import scipy as sp
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import pandas as pd
-from scipy.signal import find_peaks, kaiserord, firwin, lfilter
+from scipy.signal import find_peaks, kaiserord, firwin, lfilter, get_window
 import os
 import pickle
 from phaseco import *
@@ -23,7 +23,7 @@ def load_calc_colossogram(
     wf_pp,
     species,
     fs,
-    filter,
+    filter_meth,
     paper_analysis_folder,
     pw,
     tau,
@@ -42,15 +42,13 @@ def load_calc_colossogram(
     f0s,
     wa,
 ):
-    filter_str = get_filter_str(filter)
+    filter_str = get_filter_str(filter_meth)
 
     win_meth_str = pc.get_win_meth_str(win_meth)
 
     # Build strings
 
     # Convert for strings
-    tau_ms = 1000 * tau / fs
-    hop_ms = 1000 * hop / fs if hop > 1 else 1000 * round(hop * tau) / fs
     N_bs_str = "" if N_bs == 0 else f"N_bs={N_bs}, "
     pw_str = f"{pw}" if not wa or not pw else "WA"
     const_N_pd_str = "" if const_N_pd else "N_pd=max, "
@@ -61,15 +59,14 @@ def load_calc_colossogram(
     )
     nfft_str = "" if nfft is None else f"nfft={nfft}, "
     delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.0f}ms, "
-    hop_str = f"hop={hop_ms:.0f}ms"
-    fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, {hop_str}, tau={tau_ms:.0f}ms, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
-    pkl_fn = f"{fn_id} (Colossogram)"
-    print(f"Processing {fn_id}")
+    pkl_fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, hop={hop}, tau={tau}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+    pkl_fn = f"{pkl_fn_id} (Colossogram)"
+    print(f"Processing {pkl_fn_id}")
     # Convert to samples
     xi_min = round(xi_min_s * fs)
     xi_max = round(xi_max_s * fs)
 
-    # First, try to load in the new way
+    # First, try to load 
     pkl_folder = paper_analysis_folder + "Pickles/"
     pkl_fp = pkl_folder + pkl_fn + ".pkl"
     os.makedirs(pkl_folder, exist_ok=True)
@@ -79,12 +76,12 @@ def load_calc_colossogram(
             (colossogram_dict) = pickle.load(file)
         if only_calc_new_coherences:
             colossogram_dict["only_calc_new_coherences"] = 1
-        colossogram_dict["fn_id"] = fn_id
+        colossogram_dict["fn_id"] = pkl_fn_id
         with open(pkl_fp, "wb") as file:
             pickle.dump(colossogram_dict, file)
 
     else:
-        # Now, we know they don't exist as pickles new or old, so we recalculate
+        # Now, we know they don't exist as a pickle, so we recalculate
         if (
             plot_what_we_got
         ):  # Unless plot_what we got, in which case we just end the func here
@@ -99,7 +96,7 @@ def load_calc_colossogram(
             wf_cropped = crop_wf(wf, fs, wf_len_s)
 
             # Apply filter
-            wf_pp = filter_wf(wf_cropped, fs, filter, species)
+            wf_pp = filter_wf(wf_cropped, fs, filter_meth, species)
         # If it's already been processed and passed in, just use it
         else:
             print("Calculating colossogram with prefiltered waveform!")
@@ -122,7 +119,7 @@ def load_calc_colossogram(
         )
         # Add some extra keys
         extra_keys = {
-            "fn_id": fn_id,
+            "fn_id": pkl_fn_id,
             "win_meth_str": win_meth_str,
             "filter_str": filter_str,
         }
@@ -437,6 +434,16 @@ def get_params_from_df(df, peak_freq):
 
     return SNRfit, fwhm
 
+def get_precalc_tau_from_bw(bw, fs, win_type):    
+    if bw == 50 and win_type =='flattop':
+        if fs == 44100:
+            tau = 3285
+        elif fs == 48000:
+            tau = 3576
+    else:
+        tau, _ = get_tau_from_bw(bw, win_type, fs, nfft=2**25, verbose=True)
+    return tau
+
 
 def spectral_filter(wf, fs, cutoff_freq, type="hp"):
     """Filters waveform by zeroing out frequencies above/below cutoff frequency
@@ -524,14 +531,61 @@ def get_filter_str(filter_meth):
     return filter_str
 
 
-def get_win_hpbw(win_meth, tau, fs, nfft=None):
+def get_hpbw(win_type, tau, fs, nfft=None):
     if nfft is None:
         nfft = tau * 8
-    win, _ = pc.get_win(win_meth, tau=tau, xi=None)
+    win = get_window(win_type, tau)
     win_psd = np.abs(rfft(win, nfft)) ** 2
-    target = np.max(win_psd) / 2
-
+    target = win_psd[0] / 2
+    
     idx = np.where(win_psd <= target)[0][0]
-    f_win = rfftfreq(nfft, 1 / fs)
-    hpbw = f_win[idx] * 2
+    hpbw = rfftfreq(nfft, 1 / fs)[idx] * 2
     return hpbw
+
+# print(get_hpbw('flattop', 2**13, 44100))
+
+def get_tau_from_bw(hpbw, win_type, fs, nfft=2**20, verbose=False):
+    # Get the tau that leads to a window with hpbw closest to the target
+
+    # Exponential search for an upper bound
+    lo = 2
+    hi = 8
+    if verbose:
+        print(f"Initializing exponential search for upper bound;")
+        print(f"Lower bound is xi={lo}")
+        print(f"Testing {hi}:")
+    while get_hpbw(win_type, tau=hi, fs=fs, nfft=nfft) > hpbw:
+        lo = hi
+        hi *= 2
+        if verbose:
+            print(f"Tested {lo}, too small!")
+            print(f"Testing {hi}:")
+    if verbose:
+        print(f"Found upper bound: {hi}")
+        print(f"Initializing binary search")
+    # Binary search between lo and hi until they are neighbors
+    while hi - lo > 1:
+        mid = (lo + hi + 1) // 2
+        if verbose:
+            print(f"[{lo}, {hi}] --- testing {mid}")
+        mid_hpwb = get_hpbw(win_type, tau=mid, fs=fs, nfft=nfft)
+        if mid_hpwb == hpbw:
+            return mid_hpwb
+        elif mid_hpwb > hpbw:
+            lo = mid
+        else:
+            hi = mid
+    if verbose:
+        print(f"Now we're down to [{lo}, {hi}]")
+    lo_hpbw = get_hpbw(win_type, tau=lo, fs=fs, nfft=nfft)
+    hi_hpbw = get_hpbw(win_type, tau=hi, fs=fs, nfft=nfft)
+    # Check which is closer
+    if np.abs(hi_hpbw-hpbw) < np.abs(hpbw - lo_hpbw): 
+        tau = hi
+        hpbw = hi_hpbw
+    else:
+        tau = lo
+        hpbw = lo_hpbw
+    if verbose:
+        print(f"Final answer: {tau} for HPBW={hpbw:.5g}")
+    return tau, hpbw

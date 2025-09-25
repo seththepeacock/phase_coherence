@@ -11,34 +11,28 @@ os.chdir(r"C:\Users\setht\Dropbox\Citadel\GitHub\phase-coherence")
 "PARAMETERS"
 # Loop parameters
 all_species = [
-    "Human",
     "Anole",
+    "Human",
     "Owl",
     "Tokay",
 ]
 speciess = all_species
-wf_idxs = [0, 1]
-tau_ss = [0.13932]
-
-win_meths = [
-    # {"method": "rho", "rho": 0.7},
-    # {"method": "zeta", "zeta": 0.01, "win_type": "hann"},
-    # {"method": "zeta", "zeta": 0.01, "win_type": "boxcar"},
-    {"method": "static", "win_type": "flattop"},
-    # {"method": "static", "win_type": "hann"},
-]
+wf_idxs = range(5)
+bws = [50]
+win_meth = {"method": "rho", "win_type": "flattop", "rho": 1.0}
 
 
 # WF pre-processing parameters
-filter_meths = [
-    None,
-    #     {
-    #     "type": "kaiser",
-    #     "cf": 300,
-    #     "df": 50,
-    #     "rip": 100,
-    # },
-]
+# filter_meths = [
+#     None,
+#     # {
+#     #     "type": "kaiser",
+#     #     "cf": 300,
+#     #     "df": 50,
+#     #     "rip": 100,
+#     # },
+# ]
+filter_meth = None
 # cutoff freq (HPF if one value, BPF if two), transition band width, and max allowed ripple (in dB)
 wf_len_s = 60  # Will crop waveform to this length (in seconds)
 scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde of vertical shift on PSD;
@@ -49,13 +43,11 @@ pw = True
 wa = False
 const_N_pd = 0
 hop = 0.2  # proportion of tau
+hop_s = None
 xi_min_s = 0.001
 delta_xi_s = xi_min_s
-
 nfft = 2**13
-# # check this is greater than the max tau_s * 44100
-# while 4800 * max(tau_ss) > nfft:
-#     nfft = nfft * 2
+
 
 # PSD Parameters
 tau_psd = nfft
@@ -83,23 +75,20 @@ sigma_weighting_power = 0  # < 0 -> less weight on lower coherence part of fit
 fit_func = "exp"  # 'exp' or 'gauss'
 
 # Plotting/output parameters
-fits_noise_bin = None
 output_colossogram = 1
 output_peak_picks = 1
 output_fits = 1
 output_bad_fits = 1
-output_spreadsheet = 0
+output_spreadsheet = 1
 show_plots = 0
 
 # Species specific params
 
 # Maximum xi value
 xi_max_ss = {
-    # "Anole": 0.1,
     "Anole": 0.1,
     "Owl": 0.1,
-    "Human": 0.1,
-    # "Human": 0.5,
+    "Human": 1.0,
     "V Sim Human": 0.2,
     "Tokay": 0.1,
 }
@@ -114,9 +103,9 @@ max_khzs = {
 }
 
 "Loops"
-for filter_meth in filter_meths:
-    for win_meth in win_meths:
-        for tau_s in tau_ss:
+for pw in [True, False]:
+    for hop in [0.1]:
+        for bw in bws:
             # Initialize list for row dicts for xlsx file
             rows = []
             for species in speciess:
@@ -125,6 +114,8 @@ for filter_meth in filter_meths:
                     if wf_idx == 4 and species != "Owl":
                         continue
                     # if species == "V Sim Human" and wf_idx != 0:
+                    #     continue
+                    # if not pw and wf_idx != 2:
                     #     continue
 
                     "Get waveform"
@@ -135,10 +126,18 @@ for filter_meth in filter_meths:
                     all_sel_freqs = np.concat(
                         (good_peak_freqs, bad_peak_freqs, noise_freqs)
                     )
+                    # Get precalculated tau for this bandwidth
+                    tau = get_precalc_tau_from_bw(bw, fs, win_meth['win_type'])
 
-                    # Convert to samples
-                    # hop = round(hop_s * fs)
-                    tau = round(tau_s * fs)
+                    # Check we haven't exceeded our max set by nfft
+                    if tau > nfft:
+                        raise ValueError(f"Can't have tau = {tau} > {nfft} = nfft!")
+
+                    # # Convert to samples
+                    # if hop_s is not None:
+                    #     hop = round(hop_s * fs)
+                    # if tau_s is not None:
+                    #     tau = round(tau_s*fs)
 
                     # Process species-specific params
                     decay_start_limit_xi_s = None  # Defaults to 25% of the waveform
@@ -187,23 +186,14 @@ for filter_meth in filter_meths:
                         continue
                     # Load everything that wasn't explicitly "saved" in the filename
                     colossogram = cgram["colossogram"]
-                    fn_id = cgram["fn_id"]
+                    
                     win_meth_str = cgram["win_meth_str"]
                     f = cgram["f"]  # This will be just f0s if they were passed in
                     xis_s = cgram["xis_s"]
                     N_pd_min = cgram["N_pd_min"]
                     N_pd_max = cgram["N_pd_max"]
                     hop = cgram["hop"]
-
-                    try:
-                        method_id = cgram["method_id"]
-                    except:
-                        N_pd_str = pc.get_N_pd_str(const_N_pd, N_pd_min, N_pd_max)
-                        method_id = rf"[{win_meth_str}]   [$\tau$={tau_s*1000:.2f}ms]   [$\xi_{{\text{{max}}}}={xi_max_s*1000:.0f}$ms]   [Hop={(hop / fs)*1000:.0f}ms]   [{N_pd_str}]"
-                    try:
-                        filter_str = cgram["hpf_str"]
-                    except:
-                        filter_str = cgram["filter_str"]
+                    method_id = cgram["method_id"]
 
                     # Handle transpose from old way
                     if colossogram.shape[0] != xis_s.shape[0]:
@@ -237,18 +227,34 @@ for filter_meth in filter_meths:
                     )
 
                     "Plots"
-                    suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [{wf_len_s}s WF]   {method_id}"
+                    # Build plot-related strings
+                    N_bs_str = "" if N_bs == 0 else f"N_bs={N_bs}, "
+                    pw_str = f"{pw}" if not wa or not pw else "WA"
+                    const_N_pd_str = "" if const_N_pd else "N_pd=max, "
+                    f0s_str = (
+                        ""
+                        if f0s_cgram is None
+                        else f"f0s={np.array2string(f0s_cgram, formatter={'float' : lambda x: "%.0f" % x})}, "
+                    )
+                    nfft_str = "" if nfft is None else f"nfft={nfft}, "
+                    delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.0f}ms, "
+                    bw_str = f"HPBW={bw}Hz" if bw is not None else f"tau={1000 * tau / fs:.0f}ms"
+                    filter_str = get_filter_str(filter_meth)
+                    plot_fn_id = rf"{species} {wf_idx}, {bw_str}, hop={hop/tau:.2g}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}PW={pw_str}, {win_meth_str}, wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+                    
+                    suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [HPBW={bw}Hz]   {method_id}"
                     f_khz = f / 1000
-                    colors = [
+                    good_colors = [
                         "#1f77b4",
                         "#ff7f0e",
                         "#e377c2",
                         "#9467bd",
+                    ]
+                    bad_colors = [
                         "#d62728",
                         "#8c564b",
                         "#7f7f7f",
                         "#bcbd22",
-                        "#2ca02c",
                     ]
                     if output_colossogram:
                         print("Plotting Colossogram")
@@ -260,7 +266,7 @@ for filter_meth in filter_meths:
                             colossogram,
                             cmap="magma",
                         )
-                        plt.title(rf"Colossogram ($\tau={tau_s:.3f}$s)")
+                        plt.title(rf"Colossogram")
                         plt.ylim(0, max_khz)
                         for peak_idx in good_peak_idxs:
                             plt.scatter(
@@ -276,7 +282,7 @@ for filter_meth in filter_meths:
                         for folder in [results_folder, all_results_folder]:
                             os.makedirs(rf"{folder}/Colossograms", exist_ok=True)
                             plt.savefig(
-                                rf"{folder}/Colossograms/{fn_id} (Colossogram).png",
+                                rf"{folder}/Colossograms/{plot_fn_id} (Colossogram).png",
                                 dpi=300,
                             )
                         if show_plots:
@@ -303,10 +309,13 @@ for filter_meth in filter_meths:
                         good_peak_idxs_psd = np.argmin(
                             np.abs(good_peak_freqs[:, None] - f_psd[None, :]), axis=1
                         )
+                        bad_peak_idxs_psd = np.argmin(
+                            np.abs(bad_peak_freqs[:, None] - f_psd[None, :]), axis=1
+                        )
 
                         # Initialize plot
                         plt.close("all")
-                        plt.figure(figsize=(11, 8))
+                        plt.figure(figsize=(12, 8))
                         plt.suptitle(suptitle)
 
                         # Coherence slice plot
@@ -321,10 +330,16 @@ for filter_meth in filter_meths:
                                 label=r"$C_{\xi}$, $\xi={target_xi}$",
                                 color="k",
                             )
-                            for peak_idx, color in zip(good_peak_idxs, colors):
-                                plt.scatter(
-                                    f_khz[peak_idx], coherence_slice[peak_idx], c=color
-                                )
+                            for peak_idxs, colors in zip(
+                                [good_peak_idxs, bad_peak_idxs],
+                                [good_colors, bad_colors],
+                            ):
+                                for peak_idx, color in zip(peak_idxs, colors):
+                                    plt.scatter(
+                                        f_khz[peak_idx],
+                                        coherence_slice[peak_idx],
+                                        c=color,
+                                    )
                             plt.xlabel("Frequency (kHz)")
                             plt.ylabel(r"$C_{\xi}$")
                             # plt.xlim(0, max_khz)
@@ -334,30 +349,32 @@ for filter_meth in filter_meths:
                         # PSD plot
                         plt.title(rf"Power Spectral Density")
                         plt.plot(f_psd_khz, psd_db, label="PSD", color="k")
-                        for peak_idx_psd, color in zip(good_peak_idxs_psd, colors):
-                            plt.scatter(
-                                f_psd_khz[peak_idx_psd], psd_db[peak_idx_psd], c=color
-                            )
+                        bw_khz = bw / 1000
+                        for peak_idxs_psd, colors in zip(
+                            [good_peak_idxs_psd, bad_peak_idxs_psd],
+                            [good_colors, bad_colors],
+                        ):
+                            for peak_idx_psd, color in zip(peak_idxs_psd, colors):
+                                plt.scatter(
+                                    f_psd_khz[peak_idx_psd],
+                                    psd_db[peak_idx_psd],
+                                    c=color,
+                                )
+                                f0_khz = f_psd_khz[peak_idx_psd]
+                                # Color according to bandwidth
+                                a, b = f0_khz - bw_khz, f0_khz + bw_khz
 
-                        if win_meth["method"] == "static":
-                            # Color chosen peaks based on the STFT filtering
-                            hpbw_hz = get_win_hpbw(win_meth, tau, fs, nfft=tau_psd)
-                            psd_bin_width_hz = 1 / (tau_psd / fs)
-                            half_hpbw_psd_bins = int(
-                                round((hpbw_hz / 2) / psd_bin_width_hz)
-                            )
-                            for peak_idx_psd, color in zip(good_peak_idxs_psd, colors):
+                                # Interpolate so you get exact endpoints
+                                ya = np.interp(a, f_psd_khz, psd_db)
+                                yb = np.interp(b, f_psd_khz, psd_db)
+
+                                # Restrict x,y to the band plus the interpolated endpoints
+                                mask = (f_psd_khz >= a) & (f_psd_khz <= b)
+                                f_band = np.concatenate(([a], f_psd_khz[mask], [b]))
+                                psd_band = np.concatenate(([ya], psd_db[mask], [yb]))
                                 plt.plot(
-                                    f_psd_khz[
-                                        peak_idx_psd
-                                        - half_hpbw_psd_bins : peak_idx_psd
-                                        + half_hpbw_psd_bins
-                                    ],
-                                    psd_db[
-                                        peak_idx_psd
-                                        - half_hpbw_psd_bins : peak_idx_psd
-                                        + half_hpbw_psd_bins
-                                    ],
+                                    f_band,
+                                    psd_band,
                                     c=color,
                                 )
 
@@ -368,7 +385,7 @@ for filter_meth in filter_meths:
                         plt.tight_layout()
                         os.makedirs(f"{results_folder}/Peak Picks/", exist_ok=True)
                         plt.savefig(
-                            rf"{results_folder}/Peak Picks/{fn_id} (Peak Picks).png",
+                            rf"{results_folder}/Peak Picks/{plot_fn_id} (Peak Picks).png",
                             dpi=300,
                         )
                         if show_plots:
@@ -469,9 +486,9 @@ for filter_meth in filter_meths:
                                                 ]
                                             }
                                         )
-                                    if species not in ["Tokay", "V Sim Human"]:
-                                        SNRfit, fwhm = get_params_from_df(df, f0)
-                                        row["SNRfit"], row["FWHM"] = SNRfit, fwhm
+                                    # if species not in ["Tokay", "V Sim Human"]:
+                                    #     SNRfit, fwhm = get_params_from_df(df, f0)
+                                    #     row["SNRfit"], row["FWHM"] = SNRfit, fwhm
                                     rows.append(row)
                             # Book it!
                             plt.tight_layout()
@@ -488,7 +505,7 @@ for filter_meth in filter_meths:
                             for folder in [results_folder, all_results_folder]:
                                 os.makedirs(rf"{folder}/{fits_str}", exist_ok=True)
                                 plt.savefig(
-                                    rf"{folder}/{fits_str}/{fn_id} ({fits_str}).png",
+                                    rf"{folder}/{fits_str}/{plot_fn_id} ({fits_str}).png",
                                     dpi=300,
                                 )
                             if show_plots:
@@ -497,7 +514,7 @@ for filter_meth in filter_meths:
             if output_spreadsheet and not only_calc_new_coherences:
                 # Save parameter data as xlsx
                 df_fitted_params = pd.DataFrame(rows)
-                N_xi_fitted_parameters_fn = rf"{results_folder}/N_xi Fitted Parameters ({win_meth_str}, PW={pw}, tau={tau_s*1000:.2f}ms, {fits_mod_str})"
+                N_xi_fitted_parameters_fn = rf"{results_folder}/N_xi Fitted Parameters ({win_meth_str}, PW={pw}, tau={(tau/fs)*1000:.2f}ms, {fits_mod_str})"
                 df_fitted_params.to_excel(
                     rf"{N_xi_fitted_parameters_fn}.xlsx", index=False
                 )

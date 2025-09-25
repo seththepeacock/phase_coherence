@@ -7,26 +7,25 @@ import pandas as pd
 import numpy as np
 
 
-
 # Fixed params
-rho = 0.7
-win_meths = [{"method": "rho", "rho": rho}]
-stop_fit = 'frac'
+win_meths = [{"method": "rho", "rho": 1.0, "win_type": "flattop"}]
+stop_fit = "frac"
 stop_fit_frac = 0.1
-
 
 
 # Loop Params
 A_consts = [True, False]
+# MAIN PAPER RUN (replace pws and f0s 10-> 5000)
+# num_iters = 10
+# qs = [5, 10, 15, 20, 25, 50, 75, 100]
+# pws = [True, False]
+# f0s = [10, 100, 1000]
+
+# NEW RUN
 num_iters = 10
 qs = [5, 10, 15, 20, 25, 50, 75, 100]
-pws = [True]
-f0s = [10, 100, 1000]
-
-# num_iters = 2
-# f0s = [100, 1000]
-# pws = [True, False]
-# qs = [5, 10, 25, 50, 75, 100]
+f_ds = [100, 500, 1000, 5000]
+pws = [True, False]
 
 
 
@@ -43,10 +42,10 @@ colors = [
     "#126290",
 ]
 "Plotting Parameters"
-gen_plots = 0
+gen_plots = 1
 show_plots = 0
 fontsize = 8
-output_spreadsheet = 1
+output_spreadsheet = 0
 
 "Start loop"
 for win_meth in win_meths:
@@ -56,31 +55,33 @@ for win_meth in win_meths:
             # Spreadsheet starts now
             rows = []
             relevant_comp_str = f"PW={pw}, {win_meth_str}, A_const={A_const}"
-            for f0_i, f0 in enumerate(f0s):
+            for f_d_idx, f_d in enumerate(f_ds):
                 plt.figure(figsize=(19.2 * 0.8, 12 * 0.8))
                 for q_i, q in enumerate(qs):
-                    plt.subplot(2, int(len(qs) / 2), q_i + 1)
+                    N_cols = int(round((len(qs) / 2))) if len(qs) > 1 else 1
+                    plt.subplot(2, N_cols, q_i + 1)
                     for iter, color in zip(range(num_iters), colors[0:num_iters]):
                         print(
-                            f"Q={q} ({q_i+1}/{len(qs)}), f0={f0} ({f0_i+1}/{len(f0s)}), Iter {iter+1}/{num_iters}"
+                            f"Q={q} ({q_i+1}/{len(qs)}), f_d={f_d} ({f_d_idx+1}/{len(f_ds)}), Iter {iter+1}/{num_iters}"
                         )
 
                         "NDDHO Parameters"
 
                         fs = 44100
-                        wf_len = 60
-                        sigma = 1
+                        wf_len_s = 60
                         # Set in for loops above
                         # f0 = 1000
                         # q=1
 
                         "Coherence Parameters"
-                        tau = 2**13
-                        hop = round(0.01 * fs)
+                        hop = 0.1
+                        nfft = 8192
+                        const_N_pd = 0
+                        tau = 3285
 
-                        # These ones are set above
-                        # pw = True
-                        # win_meth = {'method':'rho', 'rho':0.7}
+                        # f0s_cgram = None
+                        f0s_cgram = np.array([f_d])
+
 
                         # xis
                         if q <= 10:
@@ -97,13 +98,15 @@ for win_meth in win_meths:
                             raise ValueError("Haven't picked a xi_max for q>100!")
 
                         # Adjust for f0=10 and f0=1000
-                        match f0:
+                        match f_d:
                             case 10:
                                 xi_max_s = xi_max_s * 10
                             case 100:
                                 xi_max_s = xi_max_s
                             case 1000:
                                 xi_max_s = xi_max_s / 10
+                            case 10000:
+                                xi_max_s = xi_max_s / 100
 
                         delta_xi_s = xi_max_s / 100
                         xi_min_s = delta_xi_s
@@ -116,16 +119,24 @@ for win_meth in win_meths:
 
                         "Filepaths"
                         # Pickle folder
-                        pkl_folder = "NDDHO/Pickles/"
+                        pkl_folder = "paper_analysis/NDDHO/Pickles/"
                         os.makedirs(pkl_folder, exist_ok=True)
+                        
                         # NDDHO WF FP
-                        wf_id_sans_q = f"f0={f0}, sigma={sigma}, len={wf_len}, fs={fs}, iter={iter}"
-                        wf_id = f"q={q}, {wf_id_sans_q}"
+                        wf_id = f"q={q}, f_d={f_d}, len={wf_len_s}, fs={fs}, iter={iter}"
                         wf_fn = f"{wf_id} [NDDHO WF]"
                         wf_fp = pkl_folder + wf_fn + ".pkl"
 
                         # Colossogram FP
-                        cgram_id = f"PW={pw}, {win_meth_str}, xi_max={xi_max_s*1000:.0f}ms, hop={(hop/fs)*1000:.0f}ms, tau={(tau/fs)*1000:.0f}ms"
+                        const_N_pd_str = "N_pd=const" if const_N_pd else "N_pd=max"
+                        f0s_str = (
+                            ""
+                            if f0s_cgram is None
+                            else f"f0s={np.array2string(f0s_cgram, formatter={'float' : lambda x: "%.0f" % x})}, "
+                        )
+                        nfft_str = "" if nfft is None else f"nfft={nfft}, "
+                        delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.0f}ms, "
+                        cgram_id = rf"PW={pw}, {win_meth_str}, hop={hop}, tau={tau}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}"
                         cgram_fn = f"{cgram_id}, {wf_id} [COLOSSOGRAM]"
                         cgram_fp = pkl_folder + cgram_fn + ".pkl"
 
@@ -136,11 +147,13 @@ for win_meth in win_meths:
                                 wf_x = pickle.load(file)
                         else:
                             print(f"Generating NDDHO {wf_fn}")
-                            wf_x, wf_y = generate_nddho(q, f0, sigma, fs, wf_len)
+                            wf_x, wf_y = generate_nddho(q, f_d, fs, wf_len_s)
                             with open(wf_fp, "wb") as file:
                                 pickle.dump(wf_x, file)
 
                         # Load/calc colossogram
+                       
+
                         if os.path.exists(cgram_fp):
                             print("Already got this colossogram, loading!")
                             with open(cgram_fp, "rb") as file:
@@ -150,27 +163,32 @@ for win_meth in win_meths:
                             cgram_dict = pc.get_colossogram(
                                 wf_x,
                                 fs,
-                                xis,
-                                pw=pw,
-                                win_meth=win_meth,
-                                tau=tau,
+                                xis=xis,
                                 hop=hop,
+                                tau=tau,
+                                win_meth=win_meth,
+                                pw=pw,
+                                nfft=nfft,
+                                const_N_pd=const_N_pd,
+                                f0s=f0s_cgram,
                                 return_dict=True,
                             )
                             with open(cgram_fp, "wb") as file:
                                 pickle.dump(cgram_dict, file)
-
+                        
                         xis_s = cgram_dict["xis_s"]
                         f = cgram_dict["f"]
                         colossogram = cgram_dict["colossogram"]
-                        # Calculate f0_d
-                        omega_0 = f0 * (2 * np.pi)
-                        gamma = omega_0 / q
-                        omega_d = np.sqrt(omega_0**2 - gamma**2)
-                        f0_d = omega_d / (2 * np.pi)
-
+                        # plt.close('all')
+                        # pc.plot_colossogram(xis_s, f, colossogram, pw=pw)
+                        # plt.show()
                         N_xi, N_xi_dict = pc.get_N_xi(
-                            xis_s, f, colossogram, f0_d, A_const=A_const, stop_fit=stop_fit, stop_fit_frac=stop_fit_frac
+                            cgram_dict,
+                            f_d,
+                            A_const=A_const,
+                            stop_fit=stop_fit,
+                            stop_fit_frac=stop_fit_frac,
+                            pw=pw,
                         )
 
                         # Unpack dictionary
@@ -184,14 +202,11 @@ for win_meth in win_meths:
                         mse = N_xi_dict["mse"]
                         decayed_idx = N_xi_dict["decayed_idx"]
 
-                        # cgram_dicts[cgram_id] = cgram_dict
-                        # N_xi_dicts[cgram_id] = N_xi_dict
-
                         if output_spreadsheet:
                             rows.append(
                                 {
                                     "Q": q,
-                                    "Undamped CF": f0,
+                                    "Undamped CF": f_d,
                                     "N_xi": N_xi,
                                     "N_xi_std": N_xi_std,
                                     "T": T,
@@ -200,9 +215,8 @@ for win_meth in win_meths:
                                     "A_std": A_std,
                                     "MSE": mse,
                                     "Iter": iter,
-                                    "Sigma": sigma,
                                     "DFT Freq Bin": f0_bin_center,
-                                    "Damped CF": f0_d,
+                                    "Damped CF": f_d,
                                     "NDDHO Params": wf_fn,
                                 }
                             )
@@ -217,13 +231,13 @@ for win_meth in win_meths:
                 # Outside of q/iter loop now (but inside f0 loop)
                 if gen_plots:
                     plt.suptitle(
-                        f"f0={f0}Hz, PW={pw}, A_const={A_const}, noise_sigma={sigma}, {win_meth_str}, hop={(hop/fs)*1000:.0f}ms, tau={(tau/fs)*1000:.0f}ms, wf_len={wf_len}s, fs={fs}Hz",
+                        rf"f0={f_d}Hz, PW={pw}, A_const={A_const}, {win_meth_str}, hop={hop}$\tau$, tau={(tau/fs)*1000:.0f}ms, wf_len={wf_len_s}s, fs={fs}Hz",
                         fontsize=fontsize,
                     )
                     plt.tight_layout()
-                    plots_folder = f"NDDHO/Results [PW={pw}]/Fits Varying Q [PW={pw}]/"
+                    plots_folder = f"paper_analysis/NDDHO/Results [{win_meth_str}]/Fits Varying Q [A_const={A_const}]/"
                     os.makedirs(plots_folder, exist_ok=True)
-                    plot_fp = f"{plots_folder}/f0={f0}Hz, {relevant_comp_str}, noise_sigma={sigma} [FITS VARYING Q].jpg"
+                    plot_fp = f"{plots_folder}/f0={f_d}Hz, {relevant_comp_str}, [FITS VARYING Q].jpg"
                     plt.savefig(plot_fp, dpi=300)
                 if show_plots:
                     plt.show()
@@ -231,7 +245,7 @@ for win_meth in win_meths:
             if output_spreadsheet:
                 # Save parameter data as xlsx
                 df_fitted_params = pd.DataFrame(rows)
-                spreadsheet_fn = rf"NDDHO/Results [PW={pw}]/NDDHO N_xi Data ({relevant_comp_str})"
+                spreadsheet_fn = rf"NDDHO/Results [PW={pw}, {win_meth_str}]/NDDHO N_xi Data ({relevant_comp_str})"
                 df_fitted_params.to_excel(rf"{spreadsheet_fn}.xlsx", index=False)
 
 
