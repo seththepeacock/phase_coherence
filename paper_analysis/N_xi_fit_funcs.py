@@ -221,169 +221,59 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
                 3117,
                 3478,
             ]
-            seth_bad_peak_freqs = [
-            ]
+            seth_bad_peak_freqs = []
             becky_good_peak_freqs = [2175, 2503, 3112, 3478]
             becky_bad_peak_freqs = [1728, 1814]
-            re_picked_then_realized_unnecessary = [1733, 2498,]
+            re_picked_then_realized_unnecessary = [
+                1733,
+                2498,
+            ]
         case "ACsb30learSOAEwfA2.mat":  # 3
             seth_good_peak_freqs = [
                 1798,
                 2143,
-            ]
-            seth_bad_peak_freqs = [
                 2417,
                 2778,
-                3047,
             ]
+            seth_bad_peak_freqs = []
             becky_good_peak_freqs = [
                 1798,
                 2143,
             ]
             becky_bad_peak_freqs = [2406, 2778]
-
-        # Tokays
-        case "tokay_GG1rearSOAEwf.mat":  # 0
-            seth_good_peak_freqs = [
-                1572,
-                1717,
+            re_picked_then_realized_unnecessary = [
+                3047,
             ]
-            seth_bad_peak_freqs = [
-                1184,
-                3219,
-                3714,
-            ]
-        case "tokay_GG2rearSOAEwf.mat":  # 1
-            seth_good_peak_freqs = [
-                1324,
-                1567,
-                2896,
-                3182,
-            ]
-            seth_bad_peak_freqs = [
-                3435,
-                3876,
-            ]
-        case "tokay_GG3rearSOAEwf.mat":  # 2
-            seth_good_peak_freqs = [
-                1109,
-                1330,
-                2821,
-                3144,
-            ]
-            seth_bad_peak_freqs = [
-                1620,
-                2272,
-            ]
-        case "tokay_GG4rearSOAEwf.mat":  # 3
-            seth_good_peak_freqs = [
-                1104,
-                2288,
-                3160,
-            ]
-            seth_bad_peak_freqs = [
-                2848,
-            ]
-
-        # Owls
-        case "Owl2R1.mat":  # 0
-            seth_good_peak_freqs = [
-                8010,
-                8432,
-            ]
-            seth_bad_peak_freqs = [
-                4354,
-                5572,
-                5947,
-                7102,
-                7453,
-                9029,
-                9586,
-            ]
-            becky_good_peak_freqs = [8016, 8450]
-            becky_bad_peak_freqs = [4342, 5578, 5953, 7090, 7453, 9035, 9574]
-        case "Owl7L1.mat":  # 1
-            seth_good_peak_freqs = [
-                7893,
-                7500,
-                8836,
-            ]
-            seth_bad_peak_freqs = [
-                6141,
-                6838,
-                8443,
-                9258,
-                9791,
-            ]
-            becky_good_peak_freqs = [7922, 7535, 8854]
-            becky_bad_peak_freqs = [6164, 6896, 8426, 9252, 9779]
-        case "TAG6rearSOAEwf1.mat":  # 2
-            seth_good_peak_freqs = [
-                6035,
-                8096,
-                8484,
-                9868,
-            ]
-            seth_bad_peak_freqs = [
-                5626,
-            ]
-            becky_good_peak_freqs = [6029, 8102, 8489, 9857]
-            becky_bad_peak_freqs = [5626]
-        case "TAG9rearSOAEwf2.mat":  # 3
-            seth_good_peak_freqs = [
-                6966,
-            ]
-            seth_bad_peak_freqs = [
-                4926,
-                6589,
-                7429,
-                9760,
-            ]
-            becky_good_peak_freqs = [6977]
-            becky_bad_peak_freqs = [3461, 4613, 4920, 6164, 7445, 9846, 10270]
-        case "owl_TAG4learSOAEwf1.mat":  # 4
-            seth_good_peak_freqs = [
-                5766,
-                7181,
-                9636,
-            ]
-            seth_bad_peak_freqs = [
-                4947,
-                8446,
-                8834,
-            ]
-            becky_good_peak_freqs = [5771, 7176, 9631]
-            becky_bad_peak_freqs = [4958, 8463, 8839]
-
         # Humans
         case "ALrearSOAEwf1.mat":  # 0
             seth_good_peak_freqs = [
+                2665,
                 2805,
                 2945,
                 3865,
             ]
             seth_bad_peak_freqs = [
-                904,
-                980,
-                2665,
                 3219,
             ]
             becky_good_peak_freqs = [2805, 2945, 3865]
-            becky_bad_peak_freqs = [904, 980, 2659, 3219]
+            becky_bad_peak_freqs = [2659, 3219]
+            re_picked_then_realized_unnecessary = []
         case "JIrearSOAEwf2.mat":  # 1
             seth_good_peak_freqs = [
-                2810,
                 2342,
-                4048,
                 5841,
-            ]
-            seth_bad_peak_freqs = [
-                3402,
                 8312,
                 8678,
             ]
+            seth_bad_peak_freqs = [
+                3402,
+            ]
             becky_good_peak_freqs = [2342, 4048, 5841]
             becky_bad_peak_freqs = [3402, 8312, 8678]
+            re_picked_then_realized_unnecessary = [
+                2810,
+                4048,
+            ]
         case "LSrearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [
                 732,
@@ -391,26 +281,137 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
                 1637,
                 2229,
             ]
-            seth_bad_peak_freqs = [
-                985,
-                1637,
-                3122,
-            ]
+            seth_bad_peak_freqs = []
             becky_good_peak_freqs = [732, 2230]
             becky_bad_peak_freqs = [985, 1637, 3122]
+            re_picked_then_realized_unnecessary = [3122]
         case "TH13RearwaveformSOAE.mat":  # 3
             seth_good_peak_freqs = [
                 904,
                 1518,
-                1674,
                 2040,
-            ]
-            seth_bad_peak_freqs = [
-                2283,
                 2697,
             ]
+
+            seth_bad_peak_freqs = []
             becky_good_peak_freqs = [904, 1518, 2040]
             becky_bad_peak_freqs = [2697]
+            re_picked_then_realized_unnecessary = [
+                1674
+            ]  # Man this was a great one though!
+        # Owls
+        case "Owl2R1.mat":  # 0
+            seth_good_peak_freqs = [
+                4354,
+                7453,
+                8432,
+                9029,
+            ]
+            seth_bad_peak_freqs = []
+            becky_good_peak_freqs = [8016, 8450]
+            becky_bad_peak_freqs = [
+                4342,
+                5578,
+                5953,
+                7090,
+                7453,
+                9035,
+            ]
+            re_picked_then_realized_unnecessary = [
+                5572,
+                5947,
+                7102,
+                8010,
+            ]
+        case "Owl7L1.mat":  # 1
+            seth_good_peak_freqs = [
+                6838,
+                7893,
+                8836,
+                9258,
+            ]
+            seth_bad_peak_freqs = []
+            becky_good_peak_freqs = [7922, 7535, 8854]
+            becky_bad_peak_freqs = [6164, 6896, 8426, 9252, 9779]
+            re_picked_then_realized_unnecessary = [
+                6141,
+                8443,
+                7500,
+                9791,
+            ]
+        case "TAG6rearSOAEwf1.mat":  # 2
+            seth_good_peak_freqs = [
+                5626,
+                8096,
+                8484,
+                9868,
+            ]
+            seth_bad_peak_freqs = []
+            becky_good_peak_freqs = [6029, 8102, 8489, 9857]
+            becky_bad_peak_freqs = [5626]
+            re_picked_then_realized_unnecessary = [6035]
+        case "TAG9rearSOAEwf2.mat":  # 3
+            seth_good_peak_freqs = [
+                4926,
+                6966,
+                7429,
+                9760,
+            ]
+            seth_bad_peak_freqs = []
+            becky_good_peak_freqs = [6977]
+            becky_bad_peak_freqs = [3461, 4613, 4920, 6164, 7445, 9846, 10270]
+            re_picked_then_realized_unnecessary = [
+                6589,
+                9760,
+            ]
+        case "owl_TAG4learSOAEwf1.mat":  # 4
+            seth_good_peak_freqs = [
+                5766,
+                7181,
+                8834,
+                9636,
+            ]
+            seth_bad_peak_freqs = []
+            becky_good_peak_freqs = [5771, 7176, 9631]
+            becky_bad_peak_freqs = [4958, 8463, 8839]
+            re_picked_then_realized_unnecessary = [4947, 8446]
+        # Tokays
+        case "tokay_GG1rearSOAEwf.mat":  # 0
+            seth_good_peak_freqs = [
+                1184,
+                1572,
+                3219,
+                3714,
+            ]
+            seth_bad_peak_freqs = []
+            re_picked_then_realized_unnecessary = [1717]
+        case "tokay_GG2rearSOAEwf.mat":  # 1
+            seth_good_peak_freqs = [1200, 1567, 3182, 3876]
+            seth_bad_peak_freqs = []
+            re_picked_then_realized_unnecessary = [1324, 2896, 3435]
+        case "tokay_GG3rearSOAEwf.mat":  # 2
+            seth_good_peak_freqs = [
+                1109,
+                1620,
+                2272,
+                3144,
+            ]
+            seth_bad_peak_freqs = [
+                
+            ]
+            re_picked_then_realized_unnecessary = [1330,
+                2821,]
+        case "tokay_GG4rearSOAEwf.mat":  # 3
+            seth_good_peak_freqs = [
+                1104,
+                2288,
+                3160,
+                2848,
+            ]
+            seth_bad_peak_freqs = [
+                
+            ]
+
     good_peak_freqs = seth_good_peak_freqs
     bad_peak_freqs = seth_bad_peak_freqs
     return wf, wf_fn, fs, np.array(good_peak_freqs), np.array(bad_peak_freqs)

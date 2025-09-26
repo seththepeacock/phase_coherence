@@ -17,7 +17,7 @@ all_species = [
     "Tokay",
 ]
 speciess = all_species
-wf_idxs = [2]
+wf_idxs = range(5)
 bws = [50]
 win_meth = {"method": "rho", "win_type": "flattop", "rho": 1.0}
 
@@ -76,7 +76,7 @@ output_colossogram = 1
 output_peak_picks = 1
 output_fits = 1
 output_bad_fits = 1
-output_spreadsheet = 0
+output_spreadsheet = 1
 show_plots = 0
 force_all_freqs = True
 
@@ -393,9 +393,10 @@ for pw in [True, False]:
                         p0 = [1, 0.5]
                         bounds = ([0, 0], [np.inf, A_max])  # [T, amp]
 
-                        for peak_freqs, peak_idxs, good_peaks in zip(
+                        for peak_freqs, peak_idxs, colors, good_peaks in zip(
                             [good_peak_freqs, bad_peak_freqs],
                             [good_peak_idxs, bad_peak_idxs],
+                            [good_colors, bad_colors],
                             [True, False],
                         ):
                             # If there are no peaks, continue
@@ -501,6 +502,11 @@ for pw in [True, False]:
                                     rf"{folder}/{fits_str}/{plot_fn_id} ({fits_str}).png",
                                     dpi=300,
                                 )
+                                # os.makedirs(rf"{folder}/Fits [All]{fits_mod_str}", exist_ok=True)
+                                # plt.savefig(
+                                #     rf"{folder}/Fits [All]{fits_mod_str}/{plot_fn_id} ({fits_str}).png",
+                                #     dpi=300,
+                                # )
                             if show_plots:
                                 plt.show()
 

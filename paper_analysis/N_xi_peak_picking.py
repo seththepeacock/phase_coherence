@@ -6,8 +6,8 @@ from phaseco import *
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences
  
-for species in ['Anole','Tokay', 'Owl', 'Human']:
-    for wf_idx in range(5):
+for species in ['Tokay']:
+    for wf_idx in [1]:
         if wf_idx == 4 and species != 'Owl':
             continue
         
@@ -19,7 +19,7 @@ for species in ['Anole','Tokay', 'Owl', 'Human']:
         wf = crop_wf(wf, fs, wf_len_s)
 
         "PARAMETERS"
-        plot = 0
+        plot = 1
         tau = 2**13
         win_type = 'hann'
         # Everyone can use the same tau; slightly less finegrained for owl but it's already way oversampled
@@ -159,19 +159,6 @@ for species in ['Anole','Tokay', 'Owl', 'Human']:
 # case 'TH13RearwaveformSOAE.mat': #3
 #     peak_freqs = [904, 1518, 2040, 2697]
 #     bad_fit_freqs = []
-# # Tokays
-# case "tokay_GG1rearSOAEwf.mat":  # 0
-#     seth_good_peak_freqs = [1184, 1572, 3214, 3714]
-#     bad_peak_freqs = []
-# case "tokay_GG2rearSOAEwf.mat":  # 1
-#     seth_good_peak_freqs = [1195, 1567, 3176, 3876]
-#     bad_peak_freqs = []
-# case "tokay_GG3rearSOAEwf.mat":  # 2
-#     seth_good_peak_freqs = [1109, 1620, 2266, 3133]
-#     bad_peak_freqs = []
-# case "tokay_GG4rearSOAEwf.mat":  # 3
-#     seth_good_peak_freqs = [1104, 2288, 2837, 3160]
-#     bad_peak_freqs = []
 # # Owls
 # case 'Owl2R1.mat': #0
 #     peak_freqs = [4355, 7451, 8458, 9039]
@@ -185,3 +172,17 @@ for species in ['Anole','Tokay', 'Owl', 'Human']:
 # case 'TAG9rearSOAEwf2.mat': #3
 #     peak_freqs = [4931, 6993, 7450, 9878]
 #     bad_fit_freqs = []
+
+# # Tokays
+# case "tokay_GG1rearSOAEwf.mat":  # 0
+#     seth_good_peak_freqs = [1184, 1572, 3214, 3714]
+#     bad_peak_freqs = []
+# case "tokay_GG2rearSOAEwf.mat":  # 1
+#     seth_good_peak_freqs = [1195, 1567, 3176, 3876]
+#     bad_peak_freqs = []
+# case "tokay_GG3rearSOAEwf.mat":  # 2
+#     seth_good_peak_freqs = [1109, 1620, 2266, 3133]
+#     bad_peak_freqs = []
+# case "tokay_GG4rearSOAEwf.mat":  # 3
+#     seth_good_peak_freqs = [1104, 2288, 2837, 3160]
+#     bad_peak_freqs = []
