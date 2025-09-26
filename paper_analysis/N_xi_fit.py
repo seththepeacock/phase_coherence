@@ -72,11 +72,11 @@ sigma_weighting_power = 0  # < 0 -> less weight on lower coherence part of fit
 fit_func = "exp"  # 'exp' or 'gauss'
 
 # Plotting/output parameters
-output_colossogram = 1
+output_colossogram = 0
 output_peak_picks = 1
-output_fits = 1
-output_bad_fits = 1
-output_spreadsheet = 1
+output_fits = 0
+output_bad_fits = 0
+output_spreadsheet = 0
 show_plots = 0
 force_all_freqs = True
 
@@ -334,7 +334,7 @@ for pw in [True, False]:
                                     )
                             plt.xlabel("Frequency (kHz)")
                             plt.ylabel(r"$C_{\xi}$")
-                            # plt.xlim(0, max_khz)
+                            plt.xlim(0, max_khz)
                             plt.ylim(0, 1)
                             plt.subplot(2, 1, 2)
 
