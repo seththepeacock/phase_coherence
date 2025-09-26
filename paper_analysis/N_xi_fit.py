@@ -24,13 +24,15 @@ win_meth = {"method": "rho", "win_type": "flattop", "rho": 1.0}
 
 # WF pre-processing parameters
 filter_meth = None
-filter_meth = {
-        "type": "kaiser",
-        "cf": 300,
-        "df": 50,
-        "rip": 100,
-    }
+
+# filter_meth = {
+#         "type": "kaiser",
+#         "cf": 300,
+#         "df": 50,
+#         "rip": 100,
+#     }
 # cutoff freq (HPF if one value, BPF if two), transition band width, and max allowed ripple (in dB)
+
 wf_len_s = 60  # Will crop waveform to this length (in seconds)
 scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde of vertical shift on PSD;
 # only actually scales if we know the right scaling constant, which is only Anoles and Humans)
@@ -385,8 +387,8 @@ for pw in [True, False]:
                     if output_fits:
                         print(rf"Fitting {wf_fn}")
                         # Get becky's dataframe
-                        if species not in ["Tokay", "V Sim Human"]:
-                            df = get_spreadsheet_df(wf_fn, species)
+                        # if species not in ["Tokay", "V Sim Human"]:
+                        #     df = get_spreadsheet_df(wf_fn, species)
 
                         p0 = [1, 0.5]
                         bounds = ([0, 0], [np.inf, A_max])  # [T, amp]
@@ -505,7 +507,7 @@ for pw in [True, False]:
             if output_spreadsheet and not only_calc_new_coherences:
                 # Save parameter data as xlsx
                 df_fitted_params = pd.DataFrame(rows)
-                N_xi_fitted_parameters_fn = rf"{results_folder}/N_xi Fitted Parameters ({win_meth_str}, PW={pw}, tau={(tau/fs)*1000:.2f}ms, {fits_mod_str})"
+                N_xi_fitted_parameters_fn = rf"{results_folder}/N_xi Fitted Parameters ({win_meth_str}, PW={pw}, BW={bw}Hz{fits_mod_str})"
                 df_fitted_params.to_excel(
                     rf"{N_xi_fitted_parameters_fn}.xlsx", index=False
                 )

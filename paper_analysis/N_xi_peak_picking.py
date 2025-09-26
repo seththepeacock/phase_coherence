@@ -132,3 +132,56 @@ for species in ['Anole','Tokay', 'Owl', 'Human']:
             plt.tight_layout()
             plt.show()
         
+
+# # Anoles
+# case 'AC6rearSOAEwfB1.mat': #0
+#     peak_freqs = [1233, 2164, 3714, 4500]
+#     bad_fit_freqs = []
+# case 'ACsb4rearSOAEwf1.mat': #1
+#     peak_freqs = [964, 3031, 3160, 3957]
+#     bad_fit_freqs = []
+# case 'ACsb24rearSOAEwfA1.mat': #2    
+#     peak_freqs = [1809, 2169, 3112, 3478]
+#     bad_fit_freqs = []
+# case 'ACsb30learSOAEwfA2.mat': #3
+#     peak_freqs = [1803, 2137, 2406, 2778]
+#     bad_fit_freqs = []
+# # Humans
+# case 'ALrearSOAEwf1.mat': #0
+#     peak_freqs = [2665, 2945, 3219, 3865]
+#     bad_fit_freqs = []
+# case 'JIrearSOAEwf2.mat': #1
+#     peak_freqs = [2342, 3402, 8312, 8678]
+#     bad_fit_freqs = []
+# case 'LSrearSOAEwf1.mat': #2
+#     peak_freqs = [732, 985, 1637, 2229]
+#     bad_fit_freqs = []
+# case 'TH13RearwaveformSOAE.mat': #3
+#     peak_freqs = [904, 1518, 2040, 2697]
+#     bad_fit_freqs = []
+# # Tokays
+# case "tokay_GG1rearSOAEwf.mat":  # 0
+#     seth_good_peak_freqs = [1184, 1572, 3214, 3714]
+#     bad_peak_freqs = []
+# case "tokay_GG2rearSOAEwf.mat":  # 1
+#     seth_good_peak_freqs = [1195, 1567, 3176, 3876]
+#     bad_peak_freqs = []
+# case "tokay_GG3rearSOAEwf.mat":  # 2
+#     seth_good_peak_freqs = [1109, 1620, 2266, 3133]
+#     bad_peak_freqs = []
+# case "tokay_GG4rearSOAEwf.mat":  # 3
+#     seth_good_peak_freqs = [1104, 2288, 2837, 3160]
+#     bad_peak_freqs = []
+# # Owls
+# case 'Owl2R1.mat': #0
+#     peak_freqs = [4355, 7451, 8458, 9039]
+#     bad_fit_freqs = []
+# case 'Owl7L1.mat': #1
+#     peak_freqs = [6896, 7941, 8861, 9271]
+#     bad_fit_freqs = []
+# case 'TAG6rearSOAEwf1.mat': #2
+#     peak_freqs = [5626, 8096, 8484, 9862]
+#     bad_fit_freqs = []
+# case 'TAG9rearSOAEwf2.mat': #3
+#     peak_freqs = [4931, 6993, 7450, 9878]
+#     bad_fit_freqs = []

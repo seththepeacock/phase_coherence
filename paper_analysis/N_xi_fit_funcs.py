@@ -60,7 +60,7 @@ def load_calc_colossogram(
     nfft_str = "" if nfft is None else f"nfft={nfft}, "
     delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.2g}ms, "
     if hop < 1:
-        hop = int(round(hop*tau))
+        hop = int(round(hop * tau))
     pkl_fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, hop={hop}, tau={tau}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{pkl_fn_id} (Colossogram)"
     print(f"Processing {pkl_fn_id}")
@@ -68,7 +68,7 @@ def load_calc_colossogram(
     xi_min = round(xi_min_s * fs)
     xi_max = round(xi_max_s * fs)
 
-    # First, try to load 
+    # First, try to load
     pkl_folder = paper_analysis_folder + "Pickles/"
     pkl_fp = pkl_folder + pkl_fn + ".pkl"
     os.makedirs(pkl_folder, exist_ok=True)
@@ -194,31 +194,48 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             seth_bad_peak_freqs = []
         # Anoles
         case "AC6rearSOAEwfB1.mat":  # 0
-            seth_good_peak_freqs = [1233, 2153, 3704, 4500,]
+            seth_good_peak_freqs = [
+                1233,
+                2153,
+                3704,
+                4500,
+            ]
             seth_bad_peak_freqs = []
             becky_good_peak_freqs = [1233, 2164, 3709, 4506]
             becky_bad_peak_freqs = []
         case "ACsb4rearSOAEwf1.mat":  # 1
-            seth_good_peak_freqs = [964, 2729, 3155, 3946,]
-            seth_bad_peak_freqs = [
+            seth_good_peak_freqs = [
+                964,
                 3025,
+                3155,
+                3946,
             ]
-            becky_good_peak_freqs = [964, 3155, 3951]
-            becky_bad_peak_freqs = [
-                3025,
-            ]
+            seth_bad_peak_freqs = []
+            becky_good_peak_freqs = [964, 3025, 3155, 3951]
+            becky_bad_peak_freqs = []
+            re_picked_then_realized_unnecessary = [2729]
         case "ACsb24rearSOAEwfA1.mat":  # 2
             seth_good_peak_freqs = [
-                2175, 2498, 3117, 3478,
+                1814,
+                2175,
+                3117,
+                3478,
             ]
-            seth_bad_peak_freqs = [1733, 1814,]
+            seth_bad_peak_freqs = [
+            ]
             becky_good_peak_freqs = [2175, 2503, 3112, 3478]
             becky_bad_peak_freqs = [1728, 1814]
+            re_picked_then_realized_unnecessary = [1733, 2498,]
         case "ACsb30learSOAEwfA2.mat":  # 3
             seth_good_peak_freqs = [
-                1798, 2143,
+                1798,
+                2143,
             ]
-            seth_bad_peak_freqs = [2417, 2778, 3047,]
+            seth_bad_peak_freqs = [
+                2417,
+                2778,
+                3047,
+            ]
             becky_good_peak_freqs = [
                 1798,
                 2143,
@@ -227,46 +244,89 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
 
         # Tokays
         case "tokay_GG1rearSOAEwf.mat":  # 0
-            seth_good_peak_freqs = [1572, 1717,]
-            seth_bad_peak_freqs = [1184, 3219, 3714,]
+            seth_good_peak_freqs = [
+                1572,
+                1717,
+            ]
+            seth_bad_peak_freqs = [
+                1184,
+                3219,
+                3714,
+            ]
         case "tokay_GG2rearSOAEwf.mat":  # 1
             seth_good_peak_freqs = [
-               1324, 1567, 2896, 3182,
+                1324,
+                1567,
+                2896,
+                3182,
             ]
-            seth_bad_peak_freqs = [3435, 3876,]
+            seth_bad_peak_freqs = [
+                3435,
+                3876,
+            ]
         case "tokay_GG3rearSOAEwf.mat":  # 2
             seth_good_peak_freqs = [
-                1109, 1330, 2821, 3144,
+                1109,
+                1330,
+                2821,
+                3144,
             ]
-            seth_bad_peak_freqs = [1620, 2272,]
+            seth_bad_peak_freqs = [
+                1620,
+                2272,
+            ]
         case "tokay_GG4rearSOAEwf.mat":  # 3
-            seth_good_peak_freqs = [1104, 2288, 3160,]
-            seth_bad_peak_freqs = [2848,]
+            seth_good_peak_freqs = [
+                1104,
+                2288,
+                3160,
+            ]
+            seth_bad_peak_freqs = [
+                2848,
+            ]
 
         # Owls
         case "Owl2R1.mat":  # 0
             seth_good_peak_freqs = [
-                8010, 8432,
+                8010,
+                8432,
             ]
             seth_bad_peak_freqs = [
-                4354, 5572, 5947, 7102, 7453, 9029, 9586,
+                4354,
+                5572,
+                5947,
+                7102,
+                7453,
+                9029,
+                9586,
             ]
             becky_good_peak_freqs = [8016, 8450]
             becky_bad_peak_freqs = [4342, 5578, 5953, 7090, 7453, 9035, 9574]
         case "Owl7L1.mat":  # 1
             seth_good_peak_freqs = [
-                7893, 7500, 8836,
+                7893,
+                7500,
+                8836,
             ]
             seth_bad_peak_freqs = [
-                6141, 6838, 8443, 9258, 9791,
+                6141,
+                6838,
+                8443,
+                9258,
+                9791,
             ]
             becky_good_peak_freqs = [7922, 7535, 8854]
             becky_bad_peak_freqs = [6164, 6896, 8426, 9252, 9779]
         case "TAG6rearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [
-               6035, 8096, 8484, 9868,
+                6035,
+                8096,
+                8484,
+                9868,
             ]
-            seth_bad_peak_freqs = [5626,]
+            seth_bad_peak_freqs = [
+                5626,
+            ]
             becky_good_peak_freqs = [6029, 8102, 8489, 9857]
             becky_bad_peak_freqs = [5626]
         case "TAG9rearSOAEwf2.mat":  # 3
@@ -274,50 +334,80 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
                 6966,
             ]
             seth_bad_peak_freqs = [
-                4926, 6589, 7429, 9760,
+                4926,
+                6589,
+                7429,
+                9760,
             ]
             becky_good_peak_freqs = [6977]
             becky_bad_peak_freqs = [3461, 4613, 4920, 6164, 7445, 9846, 10270]
         case "owl_TAG4learSOAEwf1.mat":  # 4
             seth_good_peak_freqs = [
-                5766, 7181, 9636,
+                5766,
+                7181,
+                9636,
             ]
-            seth_bad_peak_freqs = [4947, 8446, 8834,]
+            seth_bad_peak_freqs = [
+                4947,
+                8446,
+                8834,
+            ]
             becky_good_peak_freqs = [5771, 7176, 9631]
             becky_bad_peak_freqs = [4958, 8463, 8839]
 
         # Humans
         case "ALrearSOAEwf1.mat":  # 0
             seth_good_peak_freqs = [
-                2805, 2945, 3865,
+                2805,
+                2945,
+                3865,
             ]
             seth_bad_peak_freqs = [
-                904, 980, 2665, 3219,
+                904,
+                980,
+                2665,
+                3219,
             ]
             becky_good_peak_freqs = [2805, 2945, 3865]
             becky_bad_peak_freqs = [904, 980, 2659, 3219]
         case "JIrearSOAEwf2.mat":  # 1
             seth_good_peak_freqs = [
-                2810, 2342, 4048, 5841,
+                2810,
+                2342,
+                4048,
+                5841,
             ]
-            seth_bad_peak_freqs = [3402, 8312, 8678,]
+            seth_bad_peak_freqs = [
+                3402,
+                8312,
+                8678,
+            ]
             becky_good_peak_freqs = [2342, 4048, 5841]
             becky_bad_peak_freqs = [3402, 8312, 8678]
         case "LSrearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [
-                732, 985, 1637, 2229,
+                732,
+                985,
+                1637,
+                2229,
             ]
             seth_bad_peak_freqs = [
-                985, 1637, 3122,
+                985,
+                1637,
+                3122,
             ]
             becky_good_peak_freqs = [732, 2230]
             becky_bad_peak_freqs = [985, 1637, 3122]
         case "TH13RearwaveformSOAE.mat":  # 3
             seth_good_peak_freqs = [
-                904, 1518, 1674, 2040,
+                904,
+                1518,
+                1674,
+                2040,
             ]
             seth_bad_peak_freqs = [
-                2283, 2697,
+                2283,
+                2697,
             ]
             becky_good_peak_freqs = [904, 1518, 2040]
             becky_bad_peak_freqs = [2697]
@@ -436,8 +526,9 @@ def get_params_from_df(df, peak_freq):
 
     return SNRfit, fwhm
 
-def get_precalc_tau_from_bw(bw, fs, win_type):    
-    if bw == 50 and win_type =='flattop':
+
+def get_precalc_tau_from_bw(bw, fs, win_type):
+    if bw == 50 and win_type == "flattop":
         if fs == 44100:
             tau = 3285
         elif fs == 48000:
@@ -539,12 +630,14 @@ def get_hpbw(win_type, tau, fs, nfft=None):
     win = get_window(win_type, tau)
     win_psd = np.abs(rfft(win, nfft)) ** 2
     target = win_psd[0] / 2
-    
+
     idx = np.where(win_psd <= target)[0][0]
     hpbw = rfftfreq(nfft, 1 / fs)[idx] * 2
     return hpbw
 
+
 # print(get_hpbw('flattop', 2**13, 44100))
+
 
 def get_tau_from_bw(hpbw, win_type, fs, nfft=2**20, verbose=False):
     # Get the tau that leads to a window with hpbw closest to the target
@@ -582,7 +675,7 @@ def get_tau_from_bw(hpbw, win_type, fs, nfft=2**20, verbose=False):
     lo_hpbw = get_hpbw(win_type, tau=lo, fs=fs, nfft=nfft)
     hi_hpbw = get_hpbw(win_type, tau=hi, fs=fs, nfft=nfft)
     # Check which is closer
-    if np.abs(hi_hpbw-hpbw) < np.abs(hpbw - lo_hpbw): 
+    if np.abs(hi_hpbw - hpbw) < np.abs(hpbw - lo_hpbw):
         tau = hi
         hpbw = hi_hpbw
     else:

@@ -17,11 +17,12 @@ stop_fit_frac = 0.1
 # Loop Params
 A_consts = [True, False]
 # NEW RUN
-num_iters = 1
+num_iters = 10
 # qs = [5, 10, 15, 20, 25, 50, 75, 100]
 # f_ds = [100, 500, 1000, 5000] 
 qs = [5, 10, 15, 20, 25, 50, 75, 100]
-f_ds = [100, 500, 1000, 5000]
+f_ds = [100, 500, 1000]
+# Have num_iter=1 for 5000 but doesn't work well
 pws = [True, False]
 
 # OG MAIN PAPER RUN
@@ -111,11 +112,11 @@ for win_meth in win_meths:
                             case 1000:
                                 xi_max_s = xi_max_s / 10
                             case 5000:
-                                xi_max_s = xi_max_s / 500
+                                xi_max_s = xi_max_s / 50
                             case 10000:
                                 xi_max_s = xi_max_s / 100
 
-                        delta_xi_s = xi_max_s / 100
+                        delta_xi_s = max(xi_max_s / 100, 1/fs)
                         xi_min_s = delta_xi_s
 
                         xis = {
