@@ -9,7 +9,6 @@ import os
 import pickle
 from phaseco import *
 import phaseco as pc
-from phaseco.helper_funcs import get_win_meth_str
 import time
 from scipy.fft import rfft, rfftfreq
 from tqdm import tqdm
@@ -20,37 +19,32 @@ def load_calc_colossogram(
     wf_idx,
     wf_fn,
     wf_len_s,
-    wf_pp,
     species,
     fs,
     filter_meth,
-    paper_analysis_folder,
+    pkl_folder,
     pw,
     tau,
     nfft,
     xi_min_s,
     xi_max_s,
-    global_xi_max_s,
     hop,
     win_meth,
-    force_recalc_colossogram,
-    plot_what_we_got,
-    only_calc_new_coherences,
-    const_N_pd,
-    scale,
-    N_bs,
-    f0s,
-    wa,
+    scale=True,
+    wf_pp=None,
+    force_recalc_colossogram=0,
+    plot_what_we_got=0,
+    only_calc_new_coherences=0,
+    const_N_pd=0,
+    N_bs=0,
+    f0s=None,
 ):
-    filter_str = get_filter_str(filter_meth)
-
-    win_meth_str = pc.get_win_meth_str(win_meth)
+    
 
     # Build strings
-
-    # Convert for strings
+    filter_str = get_filter_str(filter_meth)
+    win_meth_str = pc.get_win_meth_str(win_meth)
     N_bs_str = "" if N_bs == 0 else f"N_bs={N_bs}, "
-    pw_str = f"{pw}" if not wa or not pw else "WA"
     const_N_pd_str = "" if const_N_pd else "N_pd=max, "
     f0s_str = (
         ""
@@ -58,36 +52,36 @@ def load_calc_colossogram(
         else f"f0s={np.array2string(f0s, formatter={'float' : lambda x: "%.0f" % x})}, "
     )
     nfft_str = "" if nfft is None else f"nfft={nfft}, "
-    delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.2g}ms, "
+    delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.1f}ms, "
     if hop < 1:
         hop = int(round(hop * tau))
-    pkl_fn_id = rf"{species} {wf_idx}, PW={pw_str}, {win_meth_str}, hop={hop}, tau={tau}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
-    pkl_fn = f"{pkl_fn_id} (Colossogram)"
-    print(f"Processing {pkl_fn_id}")
+    pkl_fn_id = rf"{species} {wf_idx}, PW={pw}, {win_meth_str}, hop={hop}, tau={tau}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+    pkl_fn = f"{pkl_fn_id} (Colossogram).pkl"
+    
     # Convert to samples
     xi_min = round(xi_min_s * fs)
     xi_max = round(xi_max_s * fs)
 
     # First, try to load
-    pkl_folder = paper_analysis_folder + "Pickles/"
-    pkl_fp = pkl_folder + pkl_fn + ".pkl"
+    pkl_fp = os.path.join(pkl_folder,  pkl_fn)
+    print(f"Processing {pkl_fp}")
     os.makedirs(pkl_folder, exist_ok=True)
 
     if os.path.exists(pkl_fp) and not force_recalc_colossogram:
-        with open(pkl_folder + pkl_fn + ".pkl", "rb") as file:
-            (colossogram_dict) = pickle.load(file)
-        if only_calc_new_coherences:
-            colossogram_dict["only_calc_new_coherences"] = 1
-        colossogram_dict["fn_id"] = pkl_fn_id
+        with open(pkl_fp, "rb") as file:
+            (cgram_dict) = pickle.load(file)
+        cgram_dict["fn_id"] = pkl_fn_id
         with open(pkl_fp, "wb") as file:
-            pickle.dump(colossogram_dict, file)
+            pickle.dump(cgram_dict, file)
+        if only_calc_new_coherences:
+            cgram_dict["only_calc_new_coherences"] = 1
 
     else:
         # Now, we know they don't exist as a pickle, so we recalculate
         if (
             plot_what_we_got
         ):  # Unless plot_what we got, in which case we just end the func here
-            return {"plot_what_we_got": 1}, wf_pp
+            return {"plot_what_we_got": 1}
 
         # First, process the wf (unless it's already processed)
         if wf_pp is None:
@@ -104,7 +98,7 @@ def load_calc_colossogram(
             print("Calculating colossogram with prefiltered waveform!")
 
         # Then get colossogram!
-        colossogram_dict = pc.get_colossogram(
+        cgram_dict = pc.get_colossogram(
             wf_pp,
             fs,
             xis={"xi_min": xi_min, "xi_max": xi_max, "delta_xi": xi_min},
@@ -114,7 +108,6 @@ def load_calc_colossogram(
             win_meth=win_meth,
             pw=pw,
             const_N_pd=const_N_pd,
-            global_xi_max_s=global_xi_max_s,
             N_bs=N_bs,
             f0s=f0s,
             return_dict=True,
@@ -125,12 +118,25 @@ def load_calc_colossogram(
             "win_meth_str": win_meth_str,
             "filter_str": filter_str,
         }
-        colossogram_dict.update(extra_keys)
+        cgram_dict.update(extra_keys)
 
-        with open(pkl_folder + pkl_fn + ".pkl", "wb") as file:
-            pickle.dump(colossogram_dict, file)
+        with open(pkl_fp, "wb") as file:
+            pickle.dump(cgram_dict, file)
+    
+    # Add the preprocessed waveform
+    cgram_dict.update({"wf_pp":wf_pp})
+
+    # Add powerweights
+    cgram_dict.update({'pw':pw})
+
+    # Check if we need to correct for old squared definition of PW
+    if pw and "unsquared_pw" not in cgram_dict.keys():
+        print("Here's an older dict that squared the powerweights, so sqrting now!")
+        unsquared_colossogram = np.sqrt(cgram_dict['colossogram'])
+        cgram_dict['colossogram'] = unsquared_colossogram
+
     # We now have colossogram_dict either from a saved pickle (new or old) or from the calculation; return it!
-    return colossogram_dict, wf_pp
+    return cgram_dict
 
 
 def scale_wf_long_way(wf):
@@ -217,16 +223,16 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
         case "ACsb24rearSOAEwfA1.mat":  # 2
             seth_good_peak_freqs = [
                 1814,
-                2175,
+                2498,
                 3117,
                 3478,
             ]
-            seth_bad_peak_freqs = []
+            seth_bad_peak_freqs = [2175,]
             becky_good_peak_freqs = [2175, 2503, 3112, 3478]
             becky_bad_peak_freqs = [1728, 1814]
             re_picked_then_realized_unnecessary = [
                 1733,
-                2498,
+                
             ]
         case "ACsb30learSOAEwfA2.mat":  # 3
             seth_good_peak_freqs = [
@@ -261,18 +267,20 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
         case "JIrearSOAEwf2.mat":  # 1
             seth_good_peak_freqs = [
                 2342,
+                4048,
                 5841,
                 8312,
-                8678,
+                
             ]
             seth_bad_peak_freqs = [
                 3402,
-            ]
+                8678,
+            ] # Note 8678 is only bad in PW=False, it's good in PW=True
             becky_good_peak_freqs = [2342, 4048, 5841]
             becky_bad_peak_freqs = [3402, 8312, 8678]
             re_picked_then_realized_unnecessary = [
                 2810,
-                4048,
+                
             ]
         case "LSrearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [
@@ -302,12 +310,12 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
         # Owls
         case "Owl2R1.mat":  # 0
             seth_good_peak_freqs = [
-                4354,
                 7453,
+                8010,
                 8432,
                 9029,
             ]
-            seth_bad_peak_freqs = []
+            seth_bad_peak_freqs = [4354,]
             becky_good_peak_freqs = [8016, 8450]
             becky_bad_peak_freqs = [
                 4342,
@@ -321,7 +329,6 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
                 5572,
                 5947,
                 7102,
-                8010,
             ]
         case "Owl7L1.mat":  # 1
             seth_good_peak_freqs = [
@@ -362,7 +369,6 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             becky_bad_peak_freqs = [3461, 4613, 4920, 6164, 7445, 9846, 10270]
             re_picked_then_realized_unnecessary = [
                 6589,
-                9760,
             ]
         case "owl_TAG4learSOAEwf1.mat":  # 4
             seth_good_peak_freqs = [
@@ -405,8 +411,8 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             seth_good_peak_freqs = [
                 1104,
                 2288,
-                3160,
                 2848,
+                3160,
             ]
             seth_bad_peak_freqs = [
                 
@@ -529,12 +535,41 @@ def get_params_from_df(df, peak_freq):
 
 
 def get_precalc_tau_from_bw(bw, fs, win_type):
-    if bw == 50 and win_type == "flattop":
-        if fs == 44100:
-            tau = 3285
-        elif fs == 48000:
-            tau = 3576
-    else:
+    tau = None
+    if win_type == "flattop":
+        match bw:
+            case 25:
+                if fs == 44100:
+                    tau = 6571
+                if fs == 48000:
+                    tau = 7152
+            case 50:
+                if fs == 44100:
+                    tau = 3285
+                elif fs == 48000:
+                    tau = 3576
+            case 100:
+                if fs == 44100:
+                    tau = 1643
+                elif fs == 48000:
+                    tau = 1788
+            case 150:
+                if fs == 44100:
+                    tau = 1095
+                elif fs == 48000:
+                    tau = 1192
+            case 200:
+                if fs == 44100:
+                    tau = 821
+                elif fs == 48000:
+                    tau = 894 
+            case 250:
+                if fs == 44100:
+                    tau = 657
+                elif fs == 48000:
+                    tau = 715
+    if tau is None:
+        print("This bandwidth/win type/fs combo hasn't been precalculated, calculating now:")
         tau, _ = get_tau_from_bw(bw, win_type, fs, nfft=2**25, verbose=True)
     return tau
 
@@ -640,7 +675,7 @@ def get_hpbw(win_type, tau, fs, nfft=None):
 # print(get_hpbw('flattop', 2**13, 44100))
 
 
-def get_tau_from_bw(hpbw, win_type, fs, nfft=2**20, verbose=False):
+def get_tau_from_bw(hpbw, win_type, fs, nfft=2**25, verbose=False):
     # Get the tau that leads to a window with hpbw closest to the target
 
     # Exponential search for an upper bound

@@ -20,10 +20,10 @@ A_consts = [True, False]
 num_iters = 10
 # qs = [5, 10, 15, 20, 25, 50, 75, 100]
 # f_ds = [100, 500, 1000, 5000] 
-qs = [5, 10, 15, 20, 25, 50, 75, 100]
+qs = [10, 15, 20, 25, 50, 75, 100]
 f_ds = [100, 500, 1000]
 # Have num_iter=1 for 5000 but doesn't work well
-pws = [True, False]
+pws = [False, True]
 
 # OG MAIN PAPER RUN
 # num_iters = 10
@@ -49,7 +49,7 @@ colors = [
 gen_plots = 1
 show_plots = 0
 fontsize = 8
-output_spreadsheet = 0
+output_spreadsheet = 1
 
 "Start loop"
 for win_meth in win_meths:
@@ -89,7 +89,7 @@ for win_meth in win_meths:
 
                         # xis
                         if q <= 10:
-                            xi_max_s = 0.1
+                            xi_max_s = 0.2
                         elif q <= 50:
                             xi_max_s = 0.5
                         elif q <= 100:
@@ -127,16 +127,13 @@ for win_meth in win_meths:
 
                         "Filepaths"
                         # Pickle folder
-                        old_pkl_folder = "paper_analysis/NDDHO/Pickles (Old)/"
-                        new_pkl_folder = "paper_analysis/NDDHO/Pickles/"
-                        os.makedirs(old_pkl_folder, exist_ok=True)
-                        os.makedirs(new_pkl_folder, exist_ok=True)
+                        pkl_folder = "paper_analysis/NDDHO/Pickles/"
+                        os.makedirs(pkl_folder, exist_ok=True)
                         
                         # NDDHO WF FP
                         wf_id = f"q={q}, f_d={f_d}, len={wf_len_s}, fs={fs}, iter={iter}"
                         wf_fn = f"{wf_id} [NDDHO WF]"
-                        old_wf_fp = old_pkl_folder + wf_fn + ".pkl"
-                        new_wf_fp = new_pkl_folder + wf_fn + ".pkl"
+                        wf_fp = pkl_folder + wf_fn + ".pkl"
 
                         # Colossogram FP
                         const_N_pd_str = "N_pd=const" if const_N_pd else "N_pd=max"
@@ -149,37 +146,25 @@ for win_meth in win_meths:
                         delta_xi_str = "" if delta_xi_s == 0.001 else f"delta_xi={delta_xi_s*1000:.2g}ms, "
                         cgram_id = rf"PW={pw}, {win_meth_str}, hop={hop}, tau={tau}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}"
                         cgram_fn = f"{cgram_id}, {wf_id} [COLOSSOGRAM]"
-                        old_cgram_fp = old_pkl_folder + cgram_fn + ".pkl"
-                        new_cgram_fp = new_pkl_folder + cgram_fn + ".pkl"
+                        cgram_fp = pkl_folder + cgram_fn + ".pkl"
 
                         # Load/calc waveform
-                        if os.path.exists(old_wf_fp):
+                        if os.path.exists(wf_fp):
                             print("Already got this wf, loading!")
-                            with open(old_wf_fp, "rb") as file:
+                            with open(wf_fp, "rb") as file:
                                 wf_x = pickle.load(file)
-                            # Dump to new folder (if we haven't already)
-                            if not os.path.exists(new_wf_fp):
-                                print("Dumping into new folder!")
-                                with open(new_wf_fp, "wb") as file:
-                                    pickle.dump(wf_x, file)
                         else:
                             print(f"Generating NDDHO {wf_fn}")
                             wf_x, wf_y = generate_nddho(q, f_d, fs, wf_len_s)
-                            with open(old_wf_fp, "wb") as file:
+                            with open(wf_fp, "wb") as file:
                                 pickle.dump(wf_x, file)
 
                         # Load/calc colossogram
-                       
-
-                        if os.path.exists(old_cgram_fp):
+                        if os.path.exists(cgram_fp):
                             print("Already got this colossogram, loading!")
-                            with open(old_cgram_fp, "rb") as file:
+                            with open(cgram_fp, "rb") as file:
                                 cgram_dict = pickle.load(file)
-                            # Dump to new folder (if we haven't already)
-                            if not os.path.exists(new_cgram_fp):
-                                print("Dumping into new folder")
-                                with open(new_cgram_fp, "wb") as file:
-                                    pickle.dump(cgram_dict, file)
+
                         else:
                             print(f"Calculating Colossogram ({cgram_id})")
                             cgram_dict = pc.get_colossogram(
@@ -195,12 +180,13 @@ for win_meth in win_meths:
                                 f0s=f0s_cgram,
                                 return_dict=True,
                             )
-                            with open(old_cgram_fp, "wb") as file:
+                            with open(cgram_fp, "wb") as file:
                                 pickle.dump(cgram_dict, file)
                         
                         xis_s = cgram_dict["xis_s"]
                         f = cgram_dict["f"]
                         colossogram = cgram_dict["colossogram"]
+                        cgram_dict['pw']=pw
                         # plt.close('all')
                         # pc.plot_colossogram(xis_s, f, colossogram, pw=pw)
                         # plt.show()
@@ -210,7 +196,6 @@ for win_meth in win_meths:
                             A_const=A_const,
                             stop_fit=stop_fit,
                             stop_fit_frac=stop_fit_frac,
-                            pw=pw,
                         )
 
                         # Unpack dictionary
@@ -257,9 +242,11 @@ for win_meth in win_meths:
                         fontsize=fontsize,
                     )
                     plt.tight_layout()
-                    plots_folder = f"paper_analysis/NDDHO/Results [{win_meth_str}]/Fits Varying Q [A_const={A_const}]/"
+                    results_folder = os.path.join('paper_analysis', 'NDDHO', f'NDDHO Results [{relevant_comp_str}]')
+                    os.makedirs(results_folder, exist_ok=True)
+                    plots_folder = os.path.join(results_folder, 'Fits Varying Q')
                     os.makedirs(plots_folder, exist_ok=True)
-                    plot_fp = f"{plots_folder}/f0={f_d}Hz, {relevant_comp_str}, [FITS VARYING Q].jpg"
+                    plot_fp = os.path.join(plots_folder, f"f0={f_d}Hz, {relevant_comp_str}, [FITS VARYING Q].jpg")
                     plt.savefig(plot_fp, dpi=300)
                 if show_plots:
                     plt.show()
@@ -267,7 +254,7 @@ for win_meth in win_meths:
             if output_spreadsheet:
                 # Save parameter data as xlsx
                 df_fitted_params = pd.DataFrame(rows)
-                spreadsheet_fn = rf"NDDHO/Results [PW={pw}, {win_meth_str}]/NDDHO N_xi Data ({relevant_comp_str})"
+                spreadsheet_fn = os.path.join(results_folder, rf"NDDHO N_xi Data ({relevant_comp_str})")
                 df_fitted_params.to_excel(rf"{spreadsheet_fn}.xlsx", index=False)
 
 

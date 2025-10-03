@@ -6,8 +6,8 @@ from phaseco import *
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, peak_prominences
  
-for species in ['Tokay']:
-    for wf_idx in [1]:
+for species in ['Anole']:
+    for wf_idx in [2]:
         if wf_idx == 4 and species != 'Owl':
             continue
         
