@@ -523,10 +523,13 @@ def get_spreadsheet_df(wf_fn, species):
     return df[df["rootWF"].str.split(r"/").str[-1] == wf_fn].copy()
 
 
-def get_params_from_df(df, peak_freq):
-    df = df[df["CF"] == peak_freq]
+def get_params_from_df(df, peak_freq, thresh=50):
+    df["CF"] = pd.to_numeric(df["CF"], errors="coerce")
+    df = df[np.abs(df["CF"] - peak_freq) < thresh]
     if len(df) == 0:
         raise ValueError("Dataframe is empty...")
+    if len(df) > 1:
+        raise ValueError(f"There is more than one of Becky's peak frequency within {thresh}Hz of your chosen peak...")
     row = df.iloc[0]
     SNRfit = row["SNRfit"]
     fwhm = row["FWHM"]

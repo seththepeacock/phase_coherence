@@ -18,15 +18,15 @@ all_species = [
 ]
 
 speciess = [
-    "Tokay",
-    "Human",
-    "Owl",
+    # "Tokay",
+    # "Human",
+    # "Owl",
     "Anole"
 ]
 
 
 
-speciess = all_species
+# speciess = all_species
 wf_idxs = range(4)
 
 
@@ -49,9 +49,9 @@ scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde 
 # only actually scales if we know the right scaling constant, which is only Anoles and Humans)
 
 # Coherence Parameters
-pws = [False]
-bws = [50]
-rhos = [1.0]
+pws = [True, False]
+bws = [200]
+rhos = [None]
 hop_props = [0.1]
 wa = False
 const_N_pd = 0
@@ -82,13 +82,14 @@ sigma_weighting_power = 0  # < 0 -> less weight on lower coherence part of fit
 fit_func = "exp"  # 'exp' or 'gauss'
 
 # Plotting/output parameters
-output_colossogram = 1
-output_peak_picks = 1
+output_colossogram = 0
+output_peak_picks = 0
 output_fits = 1
 output_bad_fits = 1
 output_spreadsheet = (
     (wf_idxs == range(4)) and (speciess == all_species)
-) and not plot_what_we_got and not long
+) and not plot_what_we_got and not long and output_fits
+output_spreadsheet = 1
 show_plots = 0
 force_all_freqs = True
 
@@ -185,9 +186,10 @@ for filter_meth in filter_meths:
                                 if xi_max_s==1.0:
                                     xi_max_s = 1.5
                             
-                            # # STATIC WINDOW PARAMS
-                            # xi_min_s = 0.001
-                            # xi_max_s = 0.05
+                            # STATIC WINDOW PARAMS
+                            if rho is None:
+                                xi_min_s = 0.001
+                                xi_max_s = 0.05
 
                             "Calculate/load things"
                             # This will either load it if it's there or calculate it (and pickle it) if not
@@ -465,8 +467,8 @@ for filter_meth in filter_meths:
                             if output_fits:
                                 print(rf"Fitting {wf_fn}")
                                 # Get becky's dataframe
-                                # if species not in ["Tokay", "V Sim Human"]:
-                                #     df = get_spreadsheet_df(wf_fn, species)
+                                if species not in ["Tokay", "V Sim Human"]:
+                                    df = get_spreadsheet_df(wf_fn, species)
 
                                 p0 = [1, 0.5]
                                 bounds = ([0, 0], [np.inf, A_max])  # [T, amp]
@@ -567,9 +569,9 @@ for filter_meth in filter_meths:
                                                             ]
                                                         }
                                                     )
-                                                # if species not in ["Tokay", "V Sim Human"]:
-                                                #     SNRfit, fwhm = get_params_from_df(df, f0)
-                                                #     row["SNRfit"], row["FWHM"] = SNRfit, fwhm
+                                                if species not in ["Tokay", "V Sim Human"]:
+                                                    SNRfit, fwhm = get_params_from_df(df, f0)
+                                                    row["SNRfit"], row["FWHM"] = SNRfit, fwhm
                                                 rows.append(row)
                                         # Book it!
                                         plt.tight_layout()
