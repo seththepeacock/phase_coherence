@@ -12,6 +12,7 @@ import phaseco as pc
 import time
 from scipy.fft import rfft, rfftfreq
 from tqdm import tqdm
+from collections import defaultdict
 
 
 def load_calc_colossogram(
@@ -39,7 +40,9 @@ def load_calc_colossogram(
     N_bs=0,
     f0s=None,
 ):
-    
+    # Make sure this is a numpy array
+    if f0s is not None:
+        f0s = np.array(f0s)
 
     # Build strings
     filter_str = get_filter_str(filter_meth)
@@ -64,7 +67,7 @@ def load_calc_colossogram(
 
     # First, try to load
     pkl_fp = os.path.join(pkl_folder,  pkl_fn)
-    print(f"Processing {pkl_fp}")
+    print(f"Processing '{pkl_fp}'")
     os.makedirs(pkl_folder, exist_ok=True)
 
     if os.path.exists(pkl_fp) and not force_recalc_colossogram:
@@ -537,43 +540,31 @@ def get_params_from_df(df, peak_freq, thresh=50):
     return SNRfit, fwhm
 
 
-def get_precalc_tau_from_bw(bw, fs, win_type):
-    tau = None
-    if win_type == "flattop":
-        match bw:
-            case 25:
-                if fs == 44100:
-                    tau = 6571
-                if fs == 48000:
-                    tau = 7152
-            case 50:
-                if fs == 44100:
-                    tau = 3285
-                elif fs == 48000:
-                    tau = 3576
-            case 100:
-                if fs == 44100:
-                    tau = 1643
-                elif fs == 48000:
-                    tau = 1788
-            case 150:
-                if fs == 44100:
-                    tau = 1095
-                elif fs == 48000:
-                    tau = 1192
-            case 200:
-                if fs == 44100:
-                    tau = 821
-                elif fs == 48000:
-                    tau = 894 
-            case 250:
-                if fs == 44100:
-                    tau = 657
-                elif fs == 48000:
-                    tau = 715
-    if tau is None:
-        print("This bandwidth/win type/fs combo hasn't been precalculated, calculating now:")
+import os
+import pickle
+
+def get_precalc_tau_from_bw(bw, fs, win_type, pkl_folder):
+    pkl_fp = os.path.join(pkl_folder, 'precalc_taus.pkl')
+    key = (win_type, fs, bw)
+
+    # Load or initialize dictionary
+    if os.path.exists(pkl_fp):
+        with open(pkl_fp, 'rb') as file:
+            d = pickle.load(file)
+    else:
+        print(f"Precalc tau dictionary not found at '{pkl_folder}', making a new one!")
+        d = {}
+
+    # Check if key exists
+    if key in d:
+        tau = d[key]
+    else:
+        print(f"Found precalc_tau dict but {key} hasn't been calculated! Calculating now...")
         tau, _ = get_tau_from_bw(bw, win_type, fs, nfft=2**25, verbose=True)
+        d[key] = tau
+        with open(pkl_fp, 'wb') as file:
+            pickle.dump(d, file)
+
     return tau
 
 
@@ -686,13 +677,13 @@ def get_tau_from_bw(hpbw, win_type, fs, nfft=2**25, verbose=False):
     hi = 8
     if verbose:
         print(f"Initializing exponential search for upper bound;")
-        print(f"Lower bound is xi={lo}")
+        print(f"Lower bound is tau={lo}")
         print(f"Testing {hi}:")
     while get_hpbw(win_type, tau=hi, fs=fs, nfft=nfft) > hpbw:
         lo = hi
         hi *= 2
         if verbose:
-            print(f"Tested {lo}, too small!")
+            print(f"Too small!")
             print(f"Testing {hi}:")
     if verbose:
         print(f"Found upper bound: {hi}")

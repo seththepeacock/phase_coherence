@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 
 
-def nddho_generator(q, f_d, fs=44100, t_max=60):
+def nddho_generator(f_d, gamma=None, q=None, fs=44100, t_max=60):
     """
     Generate a damped noise-driven harmonic oscillator (NDDHO) waveform
     using the exact discrete-time update scheme of Nørrelykke & Flyvbjerg.
@@ -45,13 +45,23 @@ def nddho_generator(q, f_d, fs=44100, t_max=60):
     n_samples = round(t_max * fs)
 
     # We're assuming m = 1 for simplicity (note k = omega_0**2 / m = omega_0**2, so we'll just use omega_0**2)
-    # omega_d^2 = omega_0^2 - gamma^2 / 4 and gamma = omega_0 / q ==>
-    omega_0 = omega_d / np.sqrt(1 - 1 / (4 * q**2))
-    gamma = omega_0 / q
-    # We also have gamma = omega_d / np.sqrt(q**2-1/4)
+    # omega_d^2 = omega_0^2 - gamma^2 / 4 and gamma = omega_0 / q ==> omega_0 = omega_d / np.sqrt(1 - 1 / (4 * q**2))
+
+    # Handle q vs gamma to define the other 
+    if (gamma is not None and q is not None) or (gamma is None and q is None):
+        raise ValueError("Must have exactly one of gamma and Q!")
+    elif q is not None:
+        omega_0 = omega_d / np.sqrt(1 - 1 / (4 * q**2))
+        gamma = omega_0 / q
+        # We also have gamma = omega_d / np.sqrt(q**2-1/4)
+    elif gamma is not None:
+        omega_0 = np.sqrt(gamma**2+omega_d**2)
+        q = omega_0 / gamma
+        
+
     
     if q <= 1/2:
-        raise ValueError("Can't handle the underdamped case Q={q} <= 1/2!")
+        raise ValueError(f"Can't handle the underdamped case Q={q} <= 1/2!")
     
     # Since their driving force is F_therm(t) = sqrt(2 * k_B * T * gamma) eta(t)
     # and we just want eta(t), we want kBT = 1/(2*gamma)

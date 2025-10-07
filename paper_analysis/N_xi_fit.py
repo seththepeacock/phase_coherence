@@ -20,14 +20,15 @@ all_species = [
 speciess = [
     # "Tokay",
     # "Human",
-    # "Owl",
-    "Anole"
+    "Owl",
+    # "Anole"
 ]
 
 
+wf_idxs = [1]
 
 # speciess = all_species
-wf_idxs = range(4)
+# wf_idxs = range(4)
 
 
 long = 0
@@ -49,7 +50,7 @@ scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde 
 # only actually scales if we know the right scaling constant, which is only Anoles and Humans)
 
 # Coherence Parameters
-pws = [True, False]
+pws = [False]
 bws = [200]
 rhos = [None]
 hop_props = [0.1]
@@ -83,14 +84,14 @@ fit_func = "exp"  # 'exp' or 'gauss'
 
 # Plotting/output parameters
 output_colossogram = 0
-output_peak_picks = 0
-output_fits = 1
-output_bad_fits = 1
+output_peak_picks = 1
+output_fits = 0
+output_bad_fits = 0
 output_spreadsheet = (
     (wf_idxs == range(4)) and (speciess == all_species)
 ) and not plot_what_we_got and not long and output_fits
-output_spreadsheet = 1
-show_plots = 0
+output_spreadsheet = 0
+show_plots = 1
 force_all_freqs = True
 
 # Species specific params
@@ -125,7 +126,7 @@ max_khzs = {
 
 # Define a folder
 pkl_folder = os.path.join("paper_analysis", "pickles")
-""
+
 "Loops"
 for filter_meth in filter_meths:
     for pw in pws:
@@ -143,6 +144,8 @@ for filter_meth in filter_meths:
                             wf_pp = None
                             xi_min_s = xi_min_ss[species]
                             if wf_idx == 4 and species != "Owl":
+                                continue
+                            if bw in [100, 150, 200] and species == "Human":
                                 continue
                             # if species == "V Sim Human" and wf_idx != 0:
                             #     continue
@@ -186,10 +189,10 @@ for filter_meth in filter_meths:
                                 if xi_max_s==1.0:
                                     xi_max_s = 1.5
                             
-                            # STATIC WINDOW PARAMS
-                            if rho is None:
-                                xi_min_s = 0.001
-                                xi_max_s = 0.05
+                            # # STATIC WINDOW PARAMS
+                            # if rho is None:
+                            #     xi_min_s = 0.001
+                            #     xi_max_s = 0.05
 
                             "Calculate/load things"
                             # This will either load it if it's there or calculate it (and pickle it) if not
@@ -467,7 +470,7 @@ for filter_meth in filter_meths:
                             if output_fits:
                                 print(rf"Fitting {wf_fn}")
                                 # Get becky's dataframe
-                                if species not in ["Tokay", "V Sim Human"]:
+                                if species not in ["Tokay", "V Sim Human"] and output_spreadsheet:
                                     df = get_spreadsheet_df(wf_fn, species)
 
                                 p0 = [1, 0.5]

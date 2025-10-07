@@ -163,7 +163,7 @@ for win_meth in win_meths:
                                     wf_x = pickle.load(file)
                             else:
                                 print(f"Generating NDDHO {wf_fn}")
-                                wf_x, wf_y = nddho_generator(q, f_d, fs, wf_len_s)
+                                wf_x, wf_y = nddho_generator(f_d, q=q, fs=fs, t_max=wf_len_s)
                                 with open(wf_fp, "wb") as file:
                                     pickle.dump(wf_x, file)
 
