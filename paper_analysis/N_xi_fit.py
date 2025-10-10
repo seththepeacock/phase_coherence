@@ -20,15 +20,15 @@ all_species = [
 speciess = [
     # "Tokay",
     # "Human",
-    "Owl",
-    # "Anole"
+    # "Owl",
+    "Anole"
 ]
 
 
 wf_idxs = [1]
 
-# speciess = all_species
-# wf_idxs = range(4)
+speciess = all_species
+wf_idxs = range(4)
 
 
 long = 0
@@ -48,11 +48,12 @@ filter_meths = [
 wf_len_s = 60  # Will crop waveform to this length (in seconds)
 scale = True  # Scale the waveform for dB SPL (shouldn't have an effect outisde of vertical shift on PSD;
 # only actually scales if we know the right scaling constant, which is only Anoles and Humans)
+demean = True # subtract mean
 
 # Coherence Parameters
-pws = [False]
-bws = [200]
-rhos = [None]
+pws = [True, False]
+bws = [50]
+rhos = [1.0]
 hop_props = [0.1]
 wa = False
 const_N_pd = 0
@@ -166,7 +167,7 @@ for filter_meth in filter_meths:
                                 else all_sel_freqs
                             )
                             # Get precalculated tau for this bandwidth
-                            tau = get_precalc_tau_from_bw(bw, fs, win_meth["win_type"])
+                            tau = get_precalc_tau_from_bw(bw, fs, win_meth["win_type"], pkl_folder)
 
                             # Check we haven't exceeded our max set by nfft
                             if tau > nfft:
@@ -186,7 +187,7 @@ for filter_meth in filter_meths:
 
                             # These ones didn't end by 1.0, so will take em out to 1.5 instead
                             if species=='Human' and wf_idx in [2, 3]:
-                                if xi_max_s==1.0:
+                                if xi_max_s == 1.0:
                                     xi_max_s = 1.5
                             
                             # # STATIC WINDOW PARAMS
@@ -218,6 +219,7 @@ for filter_meth in filter_meths:
                                     "force_recalc_colossogram": force_recalc_colossogram,
                                     "plot_what_we_got": plot_what_we_got,
                                     "only_calc_new_coherences": only_calc_new_coherences,
+                                    "demean":demean,
                                     "const_N_pd": const_N_pd,
                                     "scale": scale,
                                     "N_bs": N_bs,
@@ -303,18 +305,6 @@ for filter_meth in filter_meths:
                             method_id = rf"[$\tau$={(tau/fs)*1000:.2f}ms]   [PW={pw}]   [{win_meth_str}]   [Hop={hop_prop:.2g}$\tau$]   [{N_pd_str}]   [nfft={nfft}]"
                             suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [HPBW={bw}Hz]   {method_id}   [{filter_str}]"
                             f_khz = f / 1000
-                            good_colors = [
-                                "#1f77b4",
-                                "#ff7f0e",
-                                "#e377c2",
-                                "#9467bd",
-                            ]
-                            bad_colors = [
-                                "#d62728",
-                                "#8c564b",
-                                "#7f7f7f",
-                                "#bcbd22",
-                            ]
                             if output_colossogram:
                                 print("Plotting Colossogram")
                                 plt.close("all")
@@ -385,6 +375,10 @@ for filter_meth in filter_meths:
                                 plt.close("all")
                                 plt.figure(figsize=(12, 8))
                                 plt.suptitle(suptitle)
+
+                                # Get colors
+                                good_colors = get_colors('good')
+                                bad_colors = get_colors('bad')
 
                                 # Coherence slice plot
                                 if f0s_cgram is None:

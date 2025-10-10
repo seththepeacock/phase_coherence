@@ -31,6 +31,7 @@ def load_calc_colossogram(
     xi_max_s,
     hop,
     win_meth,
+    demean=True,
     scale=True,
     wf_pp=None,
     force_recalc_colossogram=0,
@@ -56,17 +57,18 @@ def load_calc_colossogram(
     )
     nfft_str = "" if nfft is None else f"nfft={nfft}, "
     delta_xi_str = "" if xi_min_s == 0.001 else f"delta_xi={xi_min_s*1000:.1f}ms, "
+    demean_str = "DM=True, " if demean else ""
     if hop < 1:
         hop = int(round(hop * tau))
-    pkl_fn_id = rf"{species} {wf_idx}, PW={pw}, {win_meth_str}, hop={hop}, tau={tau}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+    pkl_fn_id = rf"{species} {wf_idx}, PW={pw}, {win_meth_str}, hop={hop}, tau={tau}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}{demean_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{pkl_fn_id} (Colossogram).pkl"
-    
+
     # Convert to samples
     xi_min = round(xi_min_s * fs)
     xi_max = round(xi_max_s * fs)
 
     # First, try to load
-    pkl_fp = os.path.join(pkl_folder,  pkl_fn)
+    pkl_fp = os.path.join(pkl_folder, pkl_fn)
     print(f"Processing '{pkl_fp}'")
     os.makedirs(pkl_folder, exist_ok=True)
 
@@ -88,14 +90,21 @@ def load_calc_colossogram(
 
         # First, process the wf (unless it's already processed)
         if wf_pp is None:
-            if species in ["Anole", "Human"] and scale:  # Scale wf
-                wf = scale_wf(wf)
 
             # Crop wf
-            wf_cropped = crop_wf(wf, fs, wf_len_s)
+            wf = crop_wf(wf, fs, wf_len_s)
 
-            # Apply filter
-            wf_pp = filter_wf(wf_cropped, fs, filter_meth, species)
+            if scale:  # Scale wf
+                wf = scale_wf(wf, species)
+
+            # Subtract mean
+            if demean:
+                wf = wf - np.mean(wf)
+
+            # Apply filter (filter_meth could be None)
+            wf = filter_wf(wf, fs, filter_meth, species)
+
+            wf_pp = wf
         # If it's already been processed and passed in, just use it
         else:
             print("Calculating colossogram with prefiltered waveform!")
@@ -125,18 +134,18 @@ def load_calc_colossogram(
 
         with open(pkl_fp, "wb") as file:
             pickle.dump(cgram_dict, file)
-    
+
     # Add the preprocessed waveform
-    cgram_dict.update({"wf_pp":wf_pp})
+    cgram_dict.update({"wf_pp": wf_pp})
 
     # Add powerweights
-    cgram_dict.update({'pw':pw})
+    cgram_dict.update({"pw": pw})
 
     # Check if we need to correct for old squared definition of PW
     if pw and "unsquared_pw" not in cgram_dict.keys():
         print("Here's an older dict that squared the powerweights, so sqrting now!")
-        unsquared_colossogram = np.sqrt(cgram_dict['colossogram'])
-        cgram_dict['colossogram'] = unsquared_colossogram
+        unsquared_colossogram = np.sqrt(cgram_dict["colossogram"])
+        cgram_dict["colossogram"] = unsquared_colossogram
 
     # We now have colossogram_dict either from a saved pickle (new or old) or from the calculation; return it!
     return cgram_dict
@@ -164,10 +173,12 @@ def scale_wf_long_way(wf):
     return wf_pa
 
 
-def scale_wf(wf):
-    # Proven this is equivalent to above
-    factor = (20 * 0.01) / 0.84
-    return wf * factor
+def scale_wf(wf, species):
+    if species in ["Anole", "Human"]:
+        # Proven this is equivalent to above
+        factor = (20 * 0.01) / 0.84
+        wf = wf * factor
+    return wf
 
 
 def get_wf(wf_fn=None, species=None, wf_idx=None):
@@ -225,16 +236,17 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             re_picked_then_realized_unnecessary = [2729]
         case "ACsb24rearSOAEwfA1.mat":  # 2
             seth_good_peak_freqs = [
-                1814,
+                1733,
                 2498,
                 3117,
                 3478,
             ]
-            seth_bad_peak_freqs = [2175,]
+            seth_bad_peak_freqs = [
+                2175,
+            ]
             becky_good_peak_freqs = [2175, 2503, 3112, 3478]
-            becky_bad_peak_freqs = [1728, 1814]
+            becky_bad_peak_freqs = []
             re_picked_then_realized_unnecessary = [
-                1733,
                 
             ]
         case "ACsb30learSOAEwfA2.mat":  # 3
@@ -273,17 +285,15 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
                 4048,
                 5841,
                 8312,
-                
             ]
             seth_bad_peak_freqs = [
                 3402,
                 8678,
-            ] # Note 8678 is only bad in PW=False, it's good in PW=True
+            ]  # Note 8678 is only bad in PW=False, it's good in PW=True
             becky_good_peak_freqs = [2342, 4048, 5841]
             becky_bad_peak_freqs = [3402, 8312, 8678]
             re_picked_then_realized_unnecessary = [
                 2810,
-                
             ]
         case "LSrearSOAEwf1.mat":  # 2
             seth_good_peak_freqs = [
@@ -318,7 +328,9 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
                 8432,
                 9029,
             ]
-            seth_bad_peak_freqs = [4354,]
+            seth_bad_peak_freqs = [
+                4354,
+            ]
             becky_good_peak_freqs = [8016, 8450]
             becky_bad_peak_freqs = [
                 4342,
@@ -405,11 +417,11 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
                 2272,
                 3144,
             ]
-            seth_bad_peak_freqs = [
-                
+            seth_bad_peak_freqs = []
+            re_picked_then_realized_unnecessary = [
+                1330,
+                2821,
             ]
-            re_picked_then_realized_unnecessary = [1330,
-                2821,]
         case "tokay_GG4rearSOAEwf.mat":  # 3
             seth_good_peak_freqs = [
                 1104,
@@ -417,9 +429,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
                 2848,
                 3160,
             ]
-            seth_bad_peak_freqs = [
-                
-            ]
+            seth_bad_peak_freqs = []
 
     good_peak_freqs = seth_good_peak_freqs
     bad_peak_freqs = seth_bad_peak_freqs
@@ -440,7 +450,9 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
 #     return wf
 
 
-def filter_wf(wf, fs, filter_meth, species):
+def filter_wf(wf, fs, filter_meth, species, subtract_mean=True):
+    if subtract_mean:
+        wf = wf - np.mean(wf)
     if filter_meth is not None and species != "V Sim Human":
         match filter_meth["type"]:
             case "spectral":
@@ -532,7 +544,9 @@ def get_params_from_df(df, peak_freq, thresh=50):
     if len(df) == 0:
         raise ValueError("Dataframe is empty...")
     if len(df) > 1:
-        raise ValueError(f"There is more than one of Becky's peak frequency within {thresh}Hz of your chosen peak...")
+        raise ValueError(
+            f"There is more than one of Becky's peak frequency within {thresh}Hz of your chosen peak..."
+        )
     row = df.iloc[0]
     SNRfit = row["SNRfit"]
     fwhm = row["FWHM"]
@@ -543,13 +557,14 @@ def get_params_from_df(df, peak_freq, thresh=50):
 import os
 import pickle
 
+
 def get_precalc_tau_from_bw(bw, fs, win_type, pkl_folder):
-    pkl_fp = os.path.join(pkl_folder, 'precalc_taus.pkl')
+    pkl_fp = os.path.join(pkl_folder, "precalc_taus.pkl")
     key = (win_type, fs, bw)
 
     # Load or initialize dictionary
     if os.path.exists(pkl_fp):
-        with open(pkl_fp, 'rb') as file:
+        with open(pkl_fp, "rb") as file:
             d = pickle.load(file)
     else:
         print(f"Precalc tau dictionary not found at '{pkl_folder}', making a new one!")
@@ -559,10 +574,12 @@ def get_precalc_tau_from_bw(bw, fs, win_type, pkl_folder):
     if key in d:
         tau = d[key]
     else:
-        print(f"Found precalc_tau dict but {key} hasn't been calculated! Calculating now...")
+        print(
+            f"Found precalc_tau dict but {key} hasn't been calculated! Calculating now..."
+        )
         tau, _ = get_tau_from_bw(bw, win_type, fs, nfft=2**25, verbose=True)
         d[key] = tau
-        with open(pkl_fp, 'wb') as file:
+        with open(pkl_fp, "wb") as file:
             pickle.dump(d, file)
 
     return tau
@@ -714,3 +731,84 @@ def get_tau_from_bw(hpbw, win_type, fs, nfft=2**25, verbose=False):
     if verbose:
         print(f"Final answer: {tau} for HPBW={hpbw:.5g}")
     return tau, hpbw
+
+
+def get_colors(peak_qual):
+    match peak_qual:
+        case "good":
+            return [
+                "#1f77b4",
+                "#ff7f0e",
+                "#e377c2",
+                "#9467bd",
+            ]
+        case "bad":
+            return [
+                "#d62728",
+                "#8c564b",
+                "#7f7f7f",
+                "#bcbd22",
+            ]
+
+
+def fit_lorentzian(f, psd):
+    """
+    Fit a single Lorentzian to a PSD peak.
+
+    Parameters
+    ----------
+    f : ndarray
+        Frequency array.
+    psd : ndarray
+        PSD array corresponding to f.
+
+    Returns
+    -------
+    popt : ndarray
+        Optimal parameters [x0, y0, gamma, A].
+    lorentz_fit : ndarray
+        Lorentzian evaluated at f with fitted parameters.
+    """
+    # --- Lorentzian model ---
+    def lorentzian(x, x0, y0, gamma, A):
+        return A / (1 + ((x - x0) / gamma)**2) + y0
+    
+    # Normalize for nicer dynamic range
+    norm_factor = np.max(psd)
+    psd_norm = psd / norm_factor
+
+    # --- Initial guesses ---
+    peak_idx = np.argmax(psd_norm)
+    x0_guess = f[peak_idx]
+    A_guess = psd_norm[peak_idx]
+    y0_guess = np.min(psd_norm)
+    
+    # Rough HWHM estimate: find freq span where PSD > half max
+    half_max = A_guess / 2
+    indices_half = np.where(psd_norm > half_max)[0]
+    if len(indices_half) > 1:
+        hwhm_guess = (f[indices_half[-1]] - f[indices_half[0]]) / 2
+    else:
+        hwhm_guess = (f[-1] - f[0]) / 2  # fallback guess
+    p0 = [x0_guess, y0_guess, hwhm_guess, A_guess]
+    
+    # --- Bounds ---
+    x0_bounds = (f[0], f[-1])
+    y0_bounds = (0, np.inf)
+    hwhm_bounds = (0, f[-1] - f[0])
+    A_bounds = (A_guess*0.5, A_guess*2) #
+    
+    bounds = ( [x0_bounds[0], y0_bounds[0], hwhm_bounds[0], A_bounds[0]],
+               [x0_bounds[1], y0_bounds[1], hwhm_bounds[1], A_bounds[1]] )
+    
+    # --- Fit ---
+    try:
+        popt, pcov = curve_fit(lorentzian, f, psd_norm, p0=p0, bounds=bounds)
+    except RuntimeError:
+        print("Lorentzian fit did not converge, returning initial guess.")
+        popt = p0
+    x0, y0, gamma, A = popt
+    A, y0 = np.array([A, y0]) * norm_factor
+    lorentz_fit = lorentzian(f, x0, y0, gamma, A)
+    
+    return x0, y0, gamma, A, lorentz_fit

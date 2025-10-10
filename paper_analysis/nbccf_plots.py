@@ -15,8 +15,8 @@ all_species = ['Human','Anole', 'Owl', 'Tokay']
 
 bws = {'Anole':10, 'Human':10, 'Owl':10, 'Tokay':10}
 xi_max_mss = {'Anole':500, 'Human':500, 'Owl':500, 'Tokay':500}
-delta_f_maxs = {'Anole':50, 'Human':50, 'Owl':50, 'Tokay':50}
-delta_f_deltas = {'Anole':2, 'Human':2, 'Owl':2, 'Tokay':2}
+delta_f_maxs = {'Anole':30, 'Human':30, 'Owl':30, 'Tokay':30}
+delta_f_deltas = {'Anole':10, 'Human':10, 'Owl':10, 'Tokay':10}
 win_type = 'flattop'
 
 # Make plot directory
@@ -32,8 +32,9 @@ for wf_idx in range(4):
         delta_f_max = delta_f_maxs[species]
         delta_f_delta = delta_f_deltas[species]
 
-        
-        
+        # Make subfolder
+        plot_subfolder = f"BW={bw}, DFM={delta_f_max}, DFD={delta_f_delta}, XM={xi_max_ms}, WT={win_type}"
+        os.makedirs(os.path.join(plot_folder, plot_subfolder), exist_ok=True)
         
 
         # Get waveform
@@ -44,13 +45,14 @@ for wf_idx in range(4):
         )
         wf = crop_wf(wf, fs, wf_len_s)
         # f0s = [good_peak_freqs[0]]
-        f0s = np.concat((good_peak_freqs, bad_peak_freqs))
+        f0s = np.concat((np.array([10000, 20000]), good_peak_freqs, bad_peak_freqs))
 
         for f0 in f0s:
             print(f"Processing {f0:.0f}Hz")
             # Check if we already have it
-            fn_id = f"{species} {wf_idx}, f0={f0:.0f}, BW={bw}, DFM={delta_f_max}, DFD={delta_f_delta}, XM={xi_max_ms}, WT={win_type}.jpg"
-            if os.path.exists(os.path.join(plot_folder, fn_id)):
+            fn_id = f"{species} {wf_idx}, f0={f0:.0f}.jpg"
+            plot_fp = os.path.join(plot_folder, plot_subfolder, fn_id)
+            if os.path.exists(plot_fp):
                 print("Already got this one, continuing!")
                 continue
             
@@ -128,8 +130,9 @@ for wf_idx in range(4):
             plt.ylabel(r"$\Delta f$ [Hz]")
             id = f"[BW={bw}Hz]   [{win_type}]"
             plt.suptitle(id)
-            plt.title(f"{species} {wf_idx}, {f0:.0f}Hz Peak")
-            plt.savefig(os.path.join(plot_folder, fn_id), dpi=200)
+            peak_str = f"Noise" if f0 in [10000, 20000] else "Peak"
+            plt.title(f"{species} {wf_idx}, {f0:.0f}Hz {peak_str}")
+            plt.savefig(plot_fp, dpi=200)
             # plt.show()
 
 
