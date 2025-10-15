@@ -19,12 +19,13 @@ A_consts = [False]
 num_iters = 3
 
 # NDDHO params
-f_ds = [1000, 2000, 3000]
-qs = [25, 30, 35, 40, 45, 50]
+f_ds = [1000, 5000, 10000]
+gammas = [25, 50, 75, 100, 125, 150, 175, 200]
+gammas = [50, 75, 100, 150]
 
 # Coherence params
 pws = [False]
-rho_bw_hops = [(1.0, 50, ('s', 0.01)), (None, 'gamma', ('int', 1))]
+rho_bw_hops = [(None, 'gamma', ('int', 1)), (1.0, 50, ('s', 0.01))]
 win_type = 'flattop'
 demean = True
 
@@ -45,7 +46,7 @@ colors = [
 ]
 
 # Global folders
-pkl_folder = os.path.join('paper_analysis', 'NDDHO', 'pickles')
+pkl_folder = os.path.join('paper_analysis', 'pickles', 'nddho')
 os.makedirs(pkl_folder, exist_ok=True)
 tau_pkl_folder = os.path.join('paper_analysis', 'pickles')
 os.makedirs(tau_pkl_folder, exist_ok=True)
@@ -55,6 +56,7 @@ gen_plots = 1
 show_plots = 0
 fontsize = 8
 output_spreadsheet = 1
+plot_peak = 1
 
 "Start loop"
 for pw in pws:
@@ -64,48 +66,50 @@ for pw in pws:
             rows = []
             for f_d_idx, f_d in enumerate(f_ds):
                 plt.figure(figsize=(19.2 * 0.8, 12 * 0.8))
-                for k_q, q in enumerate(qs):
-                    # Find gamma
-                    gamma = (f_d*2*np.pi) / np.sqrt(q**2-1/4)
+                for k_gamma, gamma in enumerate(gammas):
+
 
                     # Deal with windowing method
                     if rho is None:
                         win_meth = {'method':'static', 'win_type':win_type}
-                        
                     else:
                         win_meth = {'method':'rho', 'rho':rho, 'win_type':win_type}
+                    
                     # And bandwidth
                     if bw_type == 'gamma':
                         bw = gamma/4
                     else:
                         bw = bw_type
+                    
                     # Get strings
                     win_meth_str = pc.get_win_meth_str(win_meth)
-                    bw_str = "BW=0.25gamma" if bw_type == 'gamma' else f"BW={bw_type}Hz"
+                    bw_str = "BW=gamma/4" if bw_type == 'gamma' else f"BW={bw_type}Hz"
                     relevant_comp_str = f"PW={pw}, {win_meth_str}, {bw_str}, A_const={A_const}"
-                    
-                    # Start plot
-                    N_cols = int(round((len(qs) / 2))) if len(qs) > 1 else 1
-                    plt.subplot(2, N_cols, k_q + 1)
+
+                    N_cols = int(round((len(gammas) / 2))) if len(gammas) > 1 else 1
+                    plt.subplot(2, N_cols, k_gamma + 1)
                     for iter, color in zip(range(num_iters), colors[0:num_iters]):
                         print(
-                            f"Q={q} ({k_q+1}/{len(qs)}), f_d={f_d} ({f_d_idx+1}/{len(f_ds)}), Iter {iter+1}/{num_iters}"
+                            f"gamma={gamma} ({k_gamma+1}/{len(gammas)}), f_d={f_d} ({f_d_idx+1}/{len(f_ds)}), Iter {iter+1}/{num_iters}"
                         )
 
                         "NDDHO Parameters"
 
                         fs = 44100
                         wf_len_s = 60
+                        # Set in for loops above
+                        # f0 = 1000
+                        # q=1
 
                         "Coherence Parameters"
                         nfft = 2**14
                         const_N_pd = 0
                         tau = get_precalc_tau_from_bw(bw, fs, win_meth['win_type'], tau_pkl_folder)
                         hop = get_hop_from_hop_thing(hop_thing, tau, fs)
-                        
 
                         # f0s_cgram = None
                         f0s_cgram = np.array([f_d])
+
 
                         xi_max_s = 10 / gamma
 
@@ -122,7 +126,7 @@ for pw in pws:
                         "Filepaths"
                         
                         # NDDHO WF FP
-                        wf_id = f"Q={q}, f_d={f_d}, len={wf_len_s}, fs={fs}, iter={iter}"
+                        wf_id = f"gamma={gamma}, f_d={f_d}, len={wf_len_s}, fs={fs}, iter={iter}"
                         wf_fn = f"{wf_id} [NDDHO WF].pkl"
 
                         wf_fp = os.path.join(pkl_folder, wf_fn)
@@ -147,7 +151,7 @@ for pw in pws:
                                 wf_x = pickle.load(file)
                         else:
                             print(f"Generating NDDHO {wf_fn}")
-                            wf_x, wf_y = nddho_generator(f_d, q=q, fs=fs, t_max=wf_len_s)
+                            wf_x, wf_y = nddho_generator(f_d, gamma=gamma, fs=fs, t_max=wf_len_s)
                             with open(wf_fp, "wb") as file:
                                 pickle.dump(wf_x, file)
 
@@ -207,7 +211,7 @@ for pw in pws:
                         if output_spreadsheet:
                             rows.append(
                                 {
-                                    "Q": q,
+                                    "gamma": gamma,
                                     "CF": f_d,
                                     "N_xi": N_xi,
                                     "N_xi_std": N_xi_std,
@@ -219,7 +223,6 @@ for pw in pws:
                                     "Iter": iter,
                                     "DFT Freq Bin": f0_bin_center,
                                     "Undamped CF": np.sqrt(f_d**2 + (gamma / (4*np.pi))**2),
-                                    "gamma": gamma,
                                     "NDDHO Params": wf_fn,
                                 }
                             )
@@ -240,9 +243,9 @@ for pw in pws:
                     plt.tight_layout()
                     results_folder = os.path.join('paper_analysis', 'results', 'nddho', f'NDDHO Results [{relevant_comp_str}]')
                     os.makedirs(results_folder, exist_ok=True)
-                    plots_folder = os.path.join(results_folder, 'Fits Varying Q')
+                    plots_folder = os.path.join(results_folder, 'Fits Varying gamma')
                     os.makedirs(plots_folder, exist_ok=True)
-                    plot_fp = os.path.join(plots_folder, f"f0={f_d}Hz, {relevant_comp_str}, [FITS VARYING Q].jpg")
+                    plot_fp = os.path.join(plots_folder, f"f0={f_d}Hz, {relevant_comp_str}, [FITS VARYING Gamma].jpg")
                     plt.savefig(plot_fp, dpi=300)
                 if show_plots:
                     plt.show()
@@ -250,8 +253,8 @@ for pw in pws:
             if output_spreadsheet:
                 # Save parameter data as xlsx
                 df_fitted_params = pd.DataFrame(rows)
-                spreadsheet_fn = os.path.join(results_folder, rf"NDDHO Q N_xi Data [{relevant_comp_str}].xlsx")
-                print(f"Saving to {spreadsheet_fn}")
+                spreadsheet_fn = os.path.join(results_folder, rf"NDDHO gamma N_xi Data [{relevant_comp_str}].xlsx")
+                print(spreadsheet_fn)
                 df_fitted_params.to_excel(spreadsheet_fn, index=False)
 
 
