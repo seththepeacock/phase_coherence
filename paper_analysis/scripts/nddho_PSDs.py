@@ -16,8 +16,8 @@ tau_psd = 2**14
 win_psd = 'hann'
 iter = 1
 
-# The HWHM of an NDDHO seems to be about (1/8)*gamma
-gamma_mult = 1/8 
+# The HWHM of an NDDHO seems to be about (1/8)*gamma, so to get most of the full peak we'll take 1/4 gamma on either side
+gamma_mult = 1/4 
 # So to approximate the SOAEs, which have FWHM in [50, 300], then we want our HWHMs in [25, 150], so gammas in 8*[25, 150] = [200, 1200]
 # Then we want our Qs to stay in this range as well... note Q ~ 6 * f_d / gamma so gamma ~ 6 * f_d / Q
 # So we can't have gamma exceed 1200 which holds if Q is no lower than 6 * 5000 / 1200 = 30

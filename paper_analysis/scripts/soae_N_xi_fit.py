@@ -53,13 +53,13 @@ demean = True  # subtract mean
 # Coherence Parameters
 pws = [False]
 rho_bw_hops = [
-    (None, "species", ("int", 1)),
-    (1.0, 50, ("s", 0.01)),
-    (1.0, 20, ("s", 0.01)),
+    # (1.0, 50, ("s", 0.01)),
+    (None, "species", ("s", 0.01)),
 ]
 wa = False
 const_N_pd = 0
 nfft = 2**14
+nbacf = False
 
 
 # PSD Parameters
@@ -69,7 +69,7 @@ win_type_psd = "hann"
 
 
 # Options for iterating through subjects
-force_recalc_colossogram = 0
+force_recalc_colossogram = 1
 plot_what_we_got = 0
 only_calc_new_coherences = 0
 
@@ -92,13 +92,14 @@ fit_func = "exp"  # 'exp' or 'gauss'
 output_peak_picks = 1
 output_fits = 1
 output_bad_fits = 1
-output_filtered_peaks = 1
+output_filtered_peaks_general = 1
 output_spreadsheet = (
     ((wf_idxs == range(4)) and (speciess == all_species))
     and output_fits
     and not plot_what_we_got
     and not long
 )
+output_colossograms = 1
 
 show_plots = 0
 force_all_freqs = 0
@@ -147,14 +148,16 @@ for filter_meth in filter_meths:
             # Handle windowing method
             if rho is not None:
                 win_meth = {"method": "rho", "win_type": "flattop", "rho": rho}
-                output_colossogram = 1
             else:
                 win_meth = {"method": "static", "win_type": "flattop"}
-                output_colossogram = 0
             # Check if we can do filtered peaks
-            if output_filtered_peaks and win_meth["method"] != "static":
-                print("Can't do filtered peaks for dynamic widnowing!")
-                output_filtered_peaks = 0
+            if output_filtered_peaks_general:
+                if win_meth["method"] == "static":
+                    output_filtered_peaks = 1
+                else:
+                    print("Can't do filtered peaks for dynamic widnowing!")
+                    output_filtered_peaks = 0
+                    
             for p in [0]:
                 # Initialize list for row dicts for xlsx file
                 rows = []
@@ -162,13 +165,17 @@ for filter_meth in filter_meths:
                     for wf_idx in wf_idxs:
                         wf_pp = None
                         xi_min_s = xi_min_ss[species]
-                        if wf_idx == 4 and species != "Owl":
-                            continue
+                        if bw_type == 'species':
+                            xi_min_s = 0.0005
+                        # if species != 'Human' and win_meth['method'] == 'static':
+                        #     xi_max_s = 0.05
 
                         if bw_type == "species":
                             bw = species_bws[species]
                         else:
                             bw = bw_type
+                        
+                        
 
                         "Get waveform"
                         wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(
@@ -184,8 +191,6 @@ for filter_meth in filter_meths:
                             bw, fs, win_meth["win_type"], pkl_folder
                         )
                         print(f"{fs}Hz -- tau={tau}")
-                        if bw == 10:
-                            tau = 2**14  # this is sooo close to it for 44.1khz
 
                         # Check we haven't exceeded our max set by nfft
                         if tau > nfft:
@@ -212,12 +217,13 @@ for filter_meth in filter_meths:
                         "Calculate/load things"
 
                         # Deal with # of freqs to calculate
-                        if output_colossogram or force_all_freqs:
-                            hop_cgram = hop
+                        if output_colossograms or force_all_freqs:
+                            # hop_cgram = hop
                             f0s_cgram = None
                         else:
-                            hop_cgram = 1  # So we can implement via NBACF
+                            # hop_cgram = 1  # So we can implement via NBACF
                             f0s_cgram = all_sel_freqs
+                        hop_cgram = hop
 
                         # This will either load it if it's there or calculate it (and pickle it) if not
                         cgram_dict = load_calc_colossogram(
@@ -246,6 +252,7 @@ for filter_meth in filter_meths:
                                 "scale": scale,
                                 "N_bs": N_bs,
                                 "f0s": f0s_cgram,
+                                "nbacf":nbacf,
                             }
                         )
                         if "plot_what_we_got" in cgram_dict.keys():
@@ -293,7 +300,7 @@ for filter_meth in filter_meths:
                         results_folder = os.path.join(
                             "paper_analysis",
                             "results","soae",
-                            rf"{long_str}Results ({relevant_comp_str})",
+                            rf"{long_str}SOAE Results ({relevant_comp_str})",
                         )
                         # all_results_folder = (
                         #     paper_analysis_folder + rf"Results/{long_str}Results (All Static)"
@@ -334,7 +341,7 @@ for filter_meth in filter_meths:
                         method_id = rf"[$\tau$={(tau/fs)*1e3:.2f}ms]   [PW={pw}]   [{win_meth_str}]   [{hop_str}]   [{N_pd_str}]   [nfft={nfft}]"
                         suptitle = rf"[{species} {wf_idx}]   [{wf_fn}]   [HPBW={bw}Hz]   {method_id}   [{filter_str}]"
                         f_khz = f / 1e3
-                        if output_colossogram:
+                        if output_colossograms:
                             print("Plotting Colossogram")
                             plt.close("all")
                             plt.figure(figsize=(15, 5))
@@ -525,7 +532,7 @@ for filter_meth in filter_meths:
                                     plt.suptitle(f"{suptitle}{swp_str}")
 
                                     # If we're gonna add filtered peaks, initialize that figure
-                                    if output_filtered_peaks:
+                                    if output_filtered_peaks and not zoom_to_fit:
                                         filtered_peak_fig = plt.figure(figsize=(15, 10))
                                         plt.suptitle(
                                             rf"{species} {wf_idx}    [$BW_{{\text{{{species}}}}}$={bw}]   [$\tau_\text{{PSD}}$={tau_psd}, {win_type_psd.capitalize()}]   [H={hop_psd}$\tau$]"
@@ -575,9 +582,10 @@ for filter_meth in filter_meths:
                                         )
 
                                         # Fit peak in PSD domain
-                                        if output_filtered_peaks:
+                                        if output_filtered_peaks and not zoom_to_fit:
                                             print(f"Fitting filtered peak [{f0_exact_bin:.0f}Hz]")
                                             plt.figure(filtered_peak_fig)
+                                            plt.subplot(2, 2, subplot_idx)
                                             # Filter wf for a filtered wf equivalent to STFT bin with H=1
                                             win_type = "flattop"
                                             win = get_window(win_type, tau)
@@ -640,7 +648,7 @@ for filter_meth in filter_meths:
                                         if (
                                             good_peaks
                                             and output_spreadsheet
-                                            and zoom_to_fit
+                                            and not zoom_to_fit # this way we only do it once
                                         ):
                                             row = {
                                                 "Species": species,
@@ -658,7 +666,7 @@ for filter_meth in filter_meths:
                                                 "Decayed Num Cycles": xis_s[decayed_idx]
                                                 * f0_exact_bin,
                                             }
-                                            if output_filtered_peaks:
+                                            if output_filtered_peaks and not zoom_to_fit:
                                                 row.update(L_row)
                                             if N_bs > 0:
                                                 row.update(
@@ -687,7 +695,7 @@ for filter_meth in filter_meths:
                                     if show_plots:
                                         plt.show()
                                     # Ditto for the filtered peaks
-                                    if output_filtered_peaks:
+                                    if output_filtered_peaks and not zoom_to_fit:
                                         plt.figure(filtered_peak_fig)
                                         filt_peaks_str = f"Filtered Peaks [{'Good' if good_peaks else 'Bad'}]"
                                         filt_peaks_folder = os.path.join(results_folder, "Filtered Peaks")
@@ -696,12 +704,13 @@ for filter_meth in filter_meths:
                                         plt.savefig(filt_peaks_plot_fp, dpi=300)
                                     if show_plots:
                                         plt.show()
+                                    plt.close('all')
 
                 if output_spreadsheet and not only_calc_new_coherences:
                     # Save parameter data as xlsx
                     df_fitted_params = pd.DataFrame(rows)
                     N_xi_fitted_parameters_fn = os.path.join(
-                        results_folder, rf"N_xi Fitted Parameters ({relevant_comp_str})"
+                        results_folder, rf"SOAE N_xi Fitted Parameters ({relevant_comp_str})"
                     )
                     df_fitted_params.to_excel(
                         rf"{N_xi_fitted_parameters_fn}.xlsx", index=False

@@ -40,6 +40,7 @@ def load_calc_colossogram(
     const_N_pd=0,
     N_bs=0,
     f0s=None,
+    nbacf=False,
 ):
     # Make sure this is a numpy array
     if f0s is not None:
@@ -50,6 +51,7 @@ def load_calc_colossogram(
     win_meth_str = pc.get_win_meth_str(win_meth)
     N_bs_str = "" if N_bs == 0 else f"N_bs={N_bs}, "
     const_N_pd_str = "" if const_N_pd else "N_pd=max, "
+    nbacf_str = "" if not nbacf else f"NBACF, "
     f0s_str = (
         ""
         if f0s is None
@@ -60,7 +62,7 @@ def load_calc_colossogram(
     demean_str = "DM=True, " if demean else ""
     if hop < 1:
         hop = int(round(hop * tau))
-    pkl_fn_id = rf"{species} {wf_idx}, PW={pw}, {win_meth_str}, hop={hop}, tau={tau}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}{demean_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
+    pkl_fn_id = rf"{species} {wf_idx}, PW={pw}, {win_meth_str}, hop={hop}, tau={tau}, {filter_str}, xi_max={xi_max_s*1000:.0f}ms, {nbacf_str}{delta_xi_str}{nfft_str}{f0s_str}{const_N_pd_str}{N_bs_str}{demean_str}wf_len={wf_len_s}s, wf={wf_fn.split('.')[0]}"
     pkl_fn = f"{pkl_fn_id} (Colossogram).pkl"
 
     # Convert to samples
@@ -122,6 +124,7 @@ def load_calc_colossogram(
             const_N_pd=const_N_pd,
             N_bs=N_bs,
             f0s=f0s,
+            nbacf=nbacf,
             return_dict=True,
         )
         # Add some extra keys
@@ -291,24 +294,23 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
         # Owls
         case "Owl2R1.mat":  # 0
             good_peak_freqs = [
+                4351,
                 7453,
-                8001,
                 8452,
                 9026,
             ]
             bad_peak_freqs = [
-                4351,
             ]
 
         case "Owl7L1.mat":  # 1
             good_peak_freqs = [
                 6838,
-                7500,
                 7901,
                 8836,
+                9258,
             ]
             bad_peak_freqs = [
-                9258,
+                
             ]
         case "TAG6rearSOAEwf1.mat":  # 2
             good_peak_freqs = [

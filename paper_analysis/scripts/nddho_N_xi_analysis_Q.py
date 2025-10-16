@@ -13,10 +13,9 @@ os.chdir(r"C:\Users\setht\Dropbox\Citadel\GitHub\phase-coherence")
 stop_fit = "frac"
 stop_fit_frac = 0.1
 
-
 # Loop Params
 A_consts = [False]
-num_iters = 3
+num_iters = 10
 
 # NDDHO params
 f_ds = [1000, 2000, 3000]
@@ -45,7 +44,7 @@ colors = [
 ]
 
 # Global folders
-pkl_folder = os.path.join('paper_analysis', 'NDDHO', 'pickles')
+pkl_folder = os.path.join('paper_analysis', 'pickles', 'NDDHO')
 os.makedirs(pkl_folder, exist_ok=True)
 tau_pkl_folder = os.path.join('paper_analysis', 'pickles')
 os.makedirs(tau_pkl_folder, exist_ok=True)
@@ -55,6 +54,7 @@ gen_plots = 1
 show_plots = 0
 fontsize = 8
 output_spreadsheet = 1
+plot_scatter = 1
 
 "Start loop"
 for pw in pws:
@@ -76,12 +76,12 @@ for pw in pws:
                         win_meth = {'method':'rho', 'rho':rho, 'win_type':win_type}
                     # And bandwidth
                     if bw_type == 'gamma':
-                        bw = gamma/4
+                        bw = gamma/2
                     else:
                         bw = bw_type
                     # Get strings
                     win_meth_str = pc.get_win_meth_str(win_meth)
-                    bw_str = "BW=0.25gamma" if bw_type == 'gamma' else f"BW={bw_type}Hz"
+                    bw_str = "BW=0.5gamma" if bw_type == 'gamma' else f"BW={bw_type}Hz"
                     relevant_comp_str = f"PW={pw}, {win_meth_str}, {bw_str}, A_const={A_const}"
                     
                     # Start plot
@@ -107,7 +107,7 @@ for pw in pws:
                         # f0s_cgram = None
                         f0s_cgram = np.array([f_d])
 
-                        xi_max_s = 10 / gamma
+                        xi_max_s = 15 / gamma
 
                         # delta_xi_s = max(xi_max_s / 100, 1/fs)
                         delta_xi_s = xi_max_s / 100
@@ -229,12 +229,12 @@ for pw in pws:
                                 N_xi_dict, color=color, plot_noise_floor=False
                             )
                             plt.legend(fontsize=fontsize / 2)
-                            plt.title(f"gamma={gamma}", fontsize=fontsize)
+                            plt.title(rf"$Q={q:.0f}$, $\gamma={gamma:.1f}$", fontsize=fontsize)
 
                 # Outside of q/iter loop now (but inside f0 loop)
                 if gen_plots:
                     plt.suptitle(
-                        rf"f0={f_d}Hz, PW={pw}, A_const={A_const}, {win_meth_str}, hop={hop}$\tau$, tau={(tau/fs)*1000:.0f}ms, wf_len={wf_len_s}s, fs={fs}Hz",
+                        rf"f0={f_d}Hz, PW={pw}, A_const={A_const}, {win_meth_str}, hop={hop/fs*1000:.1f}ms, tau={(tau/fs)*1000:.0f}ms, wf_len={wf_len_s}s, fs={fs}Hz",
                         fontsize=fontsize,
                     )
                     plt.tight_layout()
@@ -255,12 +255,102 @@ for pw in pws:
                 df_fitted_params.to_excel(spreadsheet_fn, index=False)
 
 
-# gamma_inv_ish = q / f0
-# if gamma_inv_ish <= 0.01:         # q <= 10
-#     xi_max_s = 0.01
-# elif gamma_inv_ish <= 0.1:        # 10 < q <= 100
-#     xi_max_s = 0.1
-# elif gamma_inv_ish <= 1.0:        # 100 < q <= 1000
-#     xi_max_s = 1.0
-# elif gamma_inv_ish <= 10.0:       # 1000 < q <= 10000
-#     xi_max_s = 10.0
+if plot_scatter:
+    # Plotting Params
+    s=25
+    fontsize = 10
+    marker='*'
+    plot_mse = False
+    nrows = 2 if plot_mse else 1
+    ncols = 3
+    fig_size = (ncols*5, nrows*5)
+    show_plot = 1
+
+    colors = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#126290",
+    ]
+
+    for A_const in A_consts:
+        for rho, bw_type, hop_thing in rho_bw_hops:
+            for pw in pws:
+                plt.close('all')
+                plt.figure(figsize=fig_size)
+                for (f_d_i, f_d), color in zip(enumerate(f_ds), colors[0 : len(f_ds)]):
+                    # Deal with windowing method
+                    if rho is None:
+                        win_meth = {'method':'static', 'win_type':win_type}
+                    else:
+                        win_meth = {'method':'rho', 'rho':rho, 'win_type':win_type}
+                    
+                    win_meth_str = pc.get_win_meth_str(win_meth)
+                    bw_str = "BW=0.5gamma" if bw_type == 'gamma' else f"BW={bw_type}Hz"
+                    relevant_comp_str = f"PW={pw}, {win_meth_str}, {bw_str}, A_const={A_const}"
+
+                    results_folder = os.path.join('paper_analysis', 'results', 'nddho', f'NDDHO Results [{relevant_comp_str}]')
+                    os.makedirs(results_folder, exist_ok=True)
+                    spreadsheet_fp = os.path.join(results_folder, f"NDDHO Q N_xi Data [{relevant_comp_str}].xlsx")
+                    # print("ANALYSIS FROM ", spreadsheet_fp)
+                    df = pd.read_excel(spreadsheet_fp)
+                    num_iters = df["Iter"].max() + 1
+                    qs = df["Q"].unique()
+
+                    for iter in range(num_iters):
+                        for q_k, q in enumerate(qs):
+                            # Deal with bandwidth
+
+                            row = df.loc[
+                                (df["CF"] == f_d) & (df["Q"] == q) & (df["Iter"] == iter)
+                            ]
+
+                            N_xi = row["N_xi"].iloc[0]
+                            T_xi = row["T_xi"].iloc[0]
+                            mse = row["MSE"].iloc[0]
+                            # Only add one label per f0
+                            label = f"UCF={f_d}Hz" if q_k == 0 and iter == 0 else None
+
+                            # N_xi vs gamma Plot
+                            # plt.subplot(nrows, ncols, f0_i + 1)
+                            plt.scatter(q, N_xi, label=label, c=color, marker=marker, s=s)
+                            plt.legend()
+                            plt.xlabel(r"Q", fontsize=fontsize)
+                            plt.ylabel(r"$N_\xi$", fontsize=fontsize)
+                            # plt.ylim(0, 35)
+                            if plot_mse:
+                                # MSE vs gamma Plot
+                                plt.subplot(nrows, ncols, f_d_i + 1 + 2)
+                                plt.scatter(q, mse, label=label, c=color, marker=marker, s=s)
+                                plt.legend()
+                
+                
+                if plot_mse:
+                    plt.subplot(nrows, ncols, 3)
+                    plt.title(r"MSE vs $Q$", fontsize=fontsize)
+                    plt.xlabel(r"$Q$", fontsize=fontsize)
+                    plt.ylabel(r"MSE", fontsize=fontsize)
+                    plt.legend()
+                    plt.subplot(nrows, ncols, 4)
+                    plt.title(r"MSE vs $Q$", fontsize=fontsize)
+                    plt.xlabel(r"$Q$", fontsize=fontsize)
+                    plt.ylabel(r"MSE", fontsize=fontsize)
+                    plt.legend()
+
+                # Adjust subplots
+                sp_space = 0.25
+                plt.subplots_adjust(wspace=sp_space, hspace=sp_space)
+
+                # Save Figure
+                scatter_fp = os.path.join(results_folder, f'N_xi vs Q [{relevant_comp_str}].jpg')
+                # plt.tight_layout()
+                plt.suptitle(rf'$N_\xi$ vs $Q$ [{relevant_comp_str}]')
+                if show_plots:
+                    plt.show()
+                plt.savefig(scatter_fp, dpi=300)

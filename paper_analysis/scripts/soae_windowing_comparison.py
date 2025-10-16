@@ -9,8 +9,8 @@ import pandas as pd
 
 
 # Switches
-show_plot = 1
-save_fig = 0
+show_plot = 0
+save_fig = 1
 
 
 # Globals
@@ -45,6 +45,18 @@ dynamic_meth = {
     "pw": False,
 }
 
+# Excluded fits
+excluded_fits = [
+    (
+        "Owl",
+        1,
+        9258,
+    ),
+    ("Owl", 0, 4351),
+    ("Anole", 3, 2783),
+    ("Anole", 2, 1811),
+]
+
 
 # Define helper func to handle legend labels
 def get_label_from_firsts(firsts, species):
@@ -64,6 +76,7 @@ speciess = {}
 titles = {}
 mse_statics = {}
 hwhms = {}
+wf_idxs = {}
 for method, key in zip([static_meth, dynamic_meth], ["static", "dynamic"]):
     # Define strings
     bw_str = (
@@ -76,11 +89,12 @@ for method, key in zip([static_meth, dynamic_meth], ["static", "dynamic"]):
         results_folder, rf"Results ({relevant_comp_str})"
     )
     N_xi_fitted_parameters_fp = os.path.join(
-        specific_results_folder, rf"N_xi Fitted Parameters ({relevant_comp_str}).xlsx"
+        specific_results_folder, rf"SOAE N_xi Fitted Parameters ({relevant_comp_str}).xlsx"
     )
     # Read df
     df = pd.read_excel(N_xi_fitted_parameters_fp)
     # Gather in lists
+    wf_idxs[key] = df["WF Index"]
     N_xis[key] = df["N_xi"]
     T_xis[key] = df["T_xi"]
     freqs[key] = df["Frequency"]
@@ -104,13 +118,15 @@ for k in range(len(N_xis["static"])):
         N_xi,
         freq,
         mse_static,
+        wf_idx,
     ) = (
         speciess["static"][k],
         N_xis["static"][k],
         freqs["static"][k],
         mse_statics["static"][k],
+        wf_idxs["static"][k],
     )
-    if mse_static > mse_thresh:
+    if mse_static > mse_thresh or (species, wf_idx, int(round(freq))) in excluded_fits:
         continue
     label, firsts = get_label_from_firsts(firsts, species)
     plt.scatter(
@@ -133,13 +149,14 @@ plt.subplot(2, 2, 2)
 plt.title(titles["dynamic"])
 firsts = {"Anole": 1, "Owl": 1, "Human": 1, "Tokay": 1}
 for k in range(len(N_xis["static"])):
-    species, N_xi, freq, mse_static = (
+    species, N_xi, freq, mse_static, wf_idx = (
         speciess["dynamic"][k],
         N_xis["dynamic"][k],
         freqs["dynamic"][k],
         mse_statics["static"][k],
+        wf_idxs["dynamic"][k],
     )
-    if mse_static > mse_thresh:
+    if mse_static > mse_thresh or (species, wf_idx, int(round(freq))) in excluded_fits:
         continue
     label, firsts = get_label_from_firsts(firsts, species)
     plt.scatter(
@@ -163,14 +180,15 @@ plt.subplot(2, 2, 3)
 plt.title(f"Static Windowing (Faint) vs Dynamic Windowing")
 firsts = {"Anole": 1, "Owl": 1, "Human": 1, "Tokay": 1}
 for k in range(len(N_xis["static"])):
-    species, freq, mse_static = (
+    species, freq, mse_static, wf_idx = (
         speciess["static"][k],
         freqs["static"][k],
         mse_statics["static"][k],
+        wf_idxs["static"][k],
     )
     # Skip egregious static fits
-    if mse_static > mse_thresh:
-        
+    if mse_static > mse_thresh or (species, wf_idx, int(round(freq))) in excluded_fits:
+
         continue
 
     # Get N_xis
@@ -210,7 +228,7 @@ for k in range(len(N_xis["static"])):
     plt.ylim(ymin, ymax)
     plt.loglog()
     plt.legend()
-    plt.grid(which="both")
+    # plt.grid(which="both")
     plt.xlabel("Frequency [kHz]")
     plt.ylabel(r"$N_\xi$")
 
@@ -222,7 +240,8 @@ firsts = {"Anole": 1, "Owl": 1, "Human": 1, "Tokay": 1}
 hwhms_for_fit = []
 inv_T_xis_for_fit = []
 for k in range(len(N_xis["static"])):
-    species, freq, mse_static, T_xi, hwhm = (
+    wf_idx, species, freq, mse_static, T_xi, hwhm = (
+        wf_idxs["static"][k],
         speciess["static"][k],
         freqs["static"][k],
         mse_statics["static"][k],
@@ -230,30 +249,34 @@ for k in range(len(N_xis["static"])):
         hwhms["static"][k],
     )
     # Skip egregious static fits
-    if mse_static > mse_thresh:
+    if mse_static > mse_thresh or (species, wf_idx, int(round(freq))) in excluded_fits:
+        print(f"Excluding {species} {wf_idx} {freq:.0f}Hz")
         continue
     # Plot
-    label = get_label_from_firsts(firsts, species)
+    label, firsts = get_label_from_firsts(firsts, species)
     plt.scatter(
-        hwhm, 1/T_xi, color=markers[species][0], marker=markers[species][1], zorder=1
+        hwhm,
+        1 / T_xi,
+        color=markers[species][0],
+        marker=markers[species][1],
+        zorder=1,
+        label=label,
     )
     plt.legend()
     plt.xlabel(r"PSD HWHM [Hz]")
     plt.ylabel(r"$1/T_\xi$")
     # Add for later
     hwhms_for_fit.append(hwhm)
-    inv_T_xis_for_fit.append(1/T_xi)
-p = np.polyfit(
-    hwhms_for_fit, inv_T_xis_for_fit, 1
-)  # p[0] = slope, p[1] = intercept
+    inv_T_xis_for_fit.append(1 / T_xi)
+p = np.polyfit(hwhms_for_fit, inv_T_xis_for_fit, 1)  # p[0] = slope, p[1] = intercept
 x = np.linspace(0, max(hwhms_for_fit), 10)
-plt.plot(x, p[0]*x+p[1], label=f'y={p[0]:.3g}x + {p[1]:.3g}')
+# plt.plot(x, p[0]*x+p[1], label=f'y={p[0]:.3g}x + {p[1]:.3g}')
 plt.legend()
 plt.tight_layout()
 
 
 if save_fig:
-    paper_figs_folder = os.path.join('paper_analysis', 'results', 'paper_figures')
+    paper_figs_folder = os.path.join("paper_analysis", "results", "paper_figures")
     os.makedirs(paper_figs_folder, exist_ok=True)
     fig_fp = os.path.join(paper_figs_folder, rf"static vs dynamic windowing.jpg")
     plt.savefig(fig_fp, dpi=300)
