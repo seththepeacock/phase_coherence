@@ -53,7 +53,7 @@ demean = True  # subtract mean
 # Coherence Parameters
 pws = [False]
 rho_bw_hops = [
-    # (1.0, 50, ("s", 0.01)),
+    (1.0, 50, ("s", 0.01)),
     (None, "species", ("s", 0.01)),
 ]
 wa = False
@@ -69,7 +69,7 @@ win_type_psd = "hann"
 
 
 # Options for iterating through subjects
-force_recalc_colossogram = 1
+force_recalc_colossogram = 0
 plot_what_we_got = 0
 only_calc_new_coherences = 0
 

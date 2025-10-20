@@ -86,7 +86,7 @@ for method, key in zip([static_meth, dynamic_meth], ["static", "dynamic"]):
     relevant_comp_str = rf"PW={method['pw']}, {bw_str}, {win_meth_str}"
     # Define paths
     specific_results_folder = os.path.join(
-        results_folder, rf"Results ({relevant_comp_str})"
+        results_folder, rf"SOAE Results ({relevant_comp_str})"
     )
     N_xi_fitted_parameters_fp = os.path.join(
         specific_results_folder, rf"SOAE N_xi Fitted Parameters ({relevant_comp_str}).xlsx"
