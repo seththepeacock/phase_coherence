@@ -138,7 +138,7 @@ max_khzs = {
 species_bws = {"Anole": 150, "Human": 50, "Owl": 300, "Tokay": 150}
 
 # Define a folder
-pkl_folder = os.path.join("paper_analysis", "pickles")
+pkl_folder = os.path.join("otocoherence_paper", "pickles")
 soae_pkl_folder = os.path.join(pkl_folder, "soae")
 
 "Loops"
@@ -298,12 +298,12 @@ for filter_meth in filter_meths:
                         bw_str = f"BW=Species" if bw_type == "species" else f"BW={bw}Hz"
                         relevant_comp_str = rf"PW={pw}, {bw_str}, {win_meth_str}"
                         results_folder = os.path.join(
-                            "paper_analysis",
+                            "otocoherence_paper",
                             "results","soae",
                             rf"{long_str}SOAE Results ({relevant_comp_str})",
                         )
                         # all_results_folder = (
-                        #     paper_analysis_folder + rf"Results/{long_str}Results (All Static)"
+                        #     otocoherence_paper_folder + rf"Results/{long_str}Results (All Static)"
                         # )
                         os.makedirs(results_folder, exist_ok=True)
                         # os.makedirs(all_results_folder, exist_ok=True)

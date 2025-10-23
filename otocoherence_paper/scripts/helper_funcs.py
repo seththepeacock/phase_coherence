@@ -154,34 +154,7 @@ def load_calc_colossogram(
     return cgram_dict
 
 
-def scale_wf_long_way(wf):
-    # First, undo the mic amplifier gain
-    gain = 40  # dB
-    wf = wf * 10 ** (-gain / 20)
-    gain = 40  # dB
-    wf = wf * 10 ** (-gain / 20)
-    # Then account for the calibration factor
-    cal_factor = 0.84
-    cal_factor = 0.84
-    wf = wf / cal_factor
-    # The waveform is now in units of volts, where 1 micro volt = 0dB SPL = 20 micropascals
-    # Let's rescale so that now 1 waveform unit (*volt*) = 0dB SPL = 20 micropascals
-    wf = wf * 1e6
-    # Now, 20*log10(dft_mags(wf)) would directly be in dB SPL.
 
-    # Finally, (optional), we'll just convert it directly to pascals by multiplying by 20 micropascals:
-    wf_pa = wf * 20 * 1e-6
-    # Now, using this version, we would have to do 20*np.log10(dft_mags(wf_pa) / (20*1e-6)) to get dB SPL.)
-
-    return wf_pa
-
-
-def scale_wf(wf, species):
-    if species in ["Anole", "Human"]:
-        # Proven this is equivalent to above
-        factor = (20 * 0.01) / 0.84
-        wf = wf * factor
-    return wf
 
 
 def get_wf(wf_fn=None, species=None, wf_idx=None):
@@ -192,7 +165,7 @@ def get_wf(wf_fn=None, species=None, wf_idx=None):
             wf_fn = get_fn(species, wf_idx)
 
     # Load wf
-    data_folder = os.path.join("paper_analysis", "data")
+    data_folder = os.path.join("otocoherence_paper", "data")
     wf_fp = os.path.join(data_folder, wf_fn)
     if species == "Tokay":
         wf = sio.loadmat(wf_fp)["wf"][0]
@@ -394,6 +367,35 @@ def crop_wf(wf, fs, wf_len_s):
 
     return wf_cropped
 
+def scale_wf_long_way(wf):
+    # First, undo the mic amplifier gain
+    gain = 40  # dB
+    wf = wf * 10 ** (-gain / 20)
+    gain = 40  # dB
+    wf = wf * 10 ** (-gain / 20)
+    # Then account for the calibration factor
+    cal_factor = 0.84
+    cal_factor = 0.84
+    wf = wf / cal_factor
+    # The waveform is now in units of volts, where 1 micro volt = 0dB SPL = 20 micropascals
+    # Let's rescale so that now 1 waveform unit (*volt*) = 0dB SPL = 20 micropascals
+    wf = wf * 1e6
+    # Now, 20*log10(dft_mags(wf)) would directly be in dB SPL.
+
+    # Finally, (optional), we'll just convert it directly to pascals by multiplying by 20 micropascals:
+    wf_pa = wf * 20 * 1e-6
+    # Now, using this version, we would have to do 20*np.log10(dft_mags(wf_pa) / (20*1e-6)) to get dB SPL.)
+
+    return wf_pa
+
+
+def scale_wf(wf, species):
+    if species in ["Anole", "Human"]:
+        # Proven this is equivalent to above
+        factor = (20 * 0.01) / 0.84
+        wf = wf * factor
+    return wf
+
 
 def get_fn(species, idx):
     match species:
@@ -434,39 +436,8 @@ def get_fn(species, idx):
             return "longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat"
         case _:
             raise ValueError(
-                "Species must be 'Anole', 'Human', 'Tokay', or 'Owl' (or 'V Sim Human')!"
+                "Species must be 'Anole', 'Human', 'Tokay', or 'Owl'!"
             )
-
-
-def get_spreadsheet_df(wf_fn, species):
-    df = pd.read_excel(
-        r"paper_analysis/Data/2024.07analysisSpreadsheetV8_RW.xlsx",
-        sheet_name=species if species != "Anole" else "Anolis",
-    )
-    if (
-        wf_fn == "TAG9rearSOAEwf2.mat"
-    ):  # This one has trailing whitespace in Becky's excel sheet
-        wf_fn += " "
-    if wf_fn == "owl_TAG4learSOAEwf1.mat":
-        wf_fn = "TAG4learSOAEwf1.mat"
-
-    return df[df["rootWF"].str.split(r"/").str[-1] == wf_fn].copy()
-
-
-def get_params_from_df(df, peak_freq, thresh=50):
-    df["CF"] = pd.to_numeric(df["CF"], errors="coerce")
-    df = df[np.abs(df["CF"] - peak_freq) < thresh]
-    if len(df) == 0:
-        raise ValueError("Dataframe is empty...")
-    if len(df) > 1:
-        raise ValueError(
-            f"There is more than one of Becky's peak frequency within {thresh}Hz of your chosen peak..."
-        )
-    row = df.iloc[0]
-    SNRfit = row["SNRfit"]
-    fwhm = row["FWHM"]
-
-    return SNRfit, fwhm
 
 
 
@@ -752,229 +723,4 @@ def get_hop_from_hop_thing(hop_thing, tau, fs):
                 raise ValueError("You passed in hop as an 'int' but it's not an int...")
     return hop
 
-    # tau = 2**13 grid
-    # # Get peak list
-    # match wf_fn:
-    #     # Vaclav's Human
-    #     case "longMCsoaeL1_20dBdiff100dB_InpN1InpYN0gain85R1rs43.mat":
-    #         seth_good_peak_freqs = [1157, 1244, 1518, 1976]
-    #         seth_bad_peak_freqs = []
-    #     # Anoles
-    #     case "AC6rearSOAEwfB1.mat":  # 0
-    #         seth_good_peak_freqs = [
-    #             1233,
-    #             2153,
-    #             3704,
-    #             4500,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         becky_good_peak_freqs = [1233, 2164, 3709, 4506]
-    #         becky_bad_peak_freqs = []
-    #     case "ACsb4rearSOAEwf1.mat":  # 1
-    #         seth_good_peak_freqs = [
-    #             964,
-    #             3025,
-    #             3155,
-    #             3946,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         becky_good_peak_freqs = [964, 3025, 3155, 3951]
-    #         becky_bad_peak_freqs = []
-    #         re_picked_then_realized_unnecessary = [2729]
-    #     case "ACsb24rearSOAEwfA1.mat":  # 2
-    #         seth_good_peak_freqs = [
-    #             1733,
-    #             2498,
-    #             3117,
-    #             3478,
-    #         ]
-    #         seth_bad_peak_freqs = [
-    #             2175,
-    #         ]
-    #         becky_good_peak_freqs = [2175, 2503, 3112, 3478]
-    #         becky_bad_peak_freqs = []
-    #         re_picked_then_realized_unnecessary = []
-    #     case "ACsb30learSOAEwfA2.mat":  # 3
-    #         seth_good_peak_freqs = [
-    #             1798,
-    #             2143,
-    #             2417,
-    #             2778,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         becky_good_peak_freqs = [
-    #             1798,
-    #             2143,
-    #         ]
-    #         becky_bad_peak_freqs = [2406, 2778]
-    #         re_picked_then_realized_unnecessary = [
-    #             3047,
-    #         ]
-    #     # Humans
-    #     case "ALrearSOAEwf1.mat":  # 0
-    #         seth_good_peak_freqs = [
-    #             2665,
-    #             2805,
-    #             2945,
-    #             3865,
-    #         ]
-    #         seth_bad_peak_freqs = [
-    #             3219,
-    #         ]
-    #         becky_good_peak_freqs = [2805, 2945, 3865]
-    #         becky_bad_peak_freqs = [2659, 3219]
-    #         re_picked_then_realized_unnecessary = []
-    #     case "JIrearSOAEwf2.mat":  # 1
-    #         seth_good_peak_freqs = [
-    #             2342,
-    #             4048,
-    #             5841,
-    #             8312,
-    #         ]
-    #         seth_bad_peak_freqs = [
-    #             3402,
-    #             8678,
-    #         ]  # Note 8678 is only bad in PW=False, it's good in PW=True
-    #         becky_good_peak_freqs = [2342, 4048, 5841]
-    #         becky_bad_peak_freqs = [3402, 8312, 8678]
-    #         re_picked_then_realized_unnecessary = [
-    #             2810,
-    #         ]
-    #     case "LSrearSOAEwf1.mat":  # 2
-    #         seth_good_peak_freqs = [
-    #             732,
-    #             985,
-    #             1637,
-    #             2229,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         becky_good_peak_freqs = [732, 2230]
-    #         becky_bad_peak_freqs = [985, 1637, 3122]
-    #         re_picked_then_realized_unnecessary = [3122]
-    #     case "TH13RearwaveformSOAE.mat":  # 3
-    #         seth_good_peak_freqs = [
-    #             904,
-    #             1518,
-    #             2040,
-    #             2697,
-    #         ]
 
-    #         seth_bad_peak_freqs = []
-    #         becky_good_peak_freqs = [904, 1518, 2040]
-    #         becky_bad_peak_freqs = [2697]
-    #         re_picked_then_realized_unnecessary = [
-    #             1674
-    #         ]  # Man this was a great one though!
-    #     # Owls
-    #     case "Owl2R1.mat":  # 0
-    #         seth_good_peak_freqs = [
-    #             7453,
-    #             8010,
-    #             8432,
-    #             9029,
-    #         ]
-    #         seth_bad_peak_freqs = [
-    #             4354,
-    #         ]
-    #         becky_good_peak_freqs = [8016, 8450]
-    #         becky_bad_peak_freqs = [
-    #             4342,
-    #             5578,
-    #             5953,
-    #             7090,
-    #             7453,
-    #             9035,
-    #         ]
-    #         re_picked_then_realized_unnecessary = [
-    #             5572,
-    #             5947,
-    #             7102,
-    #         ]
-    #     case "Owl7L1.mat":  # 1
-    #         seth_good_peak_freqs = [
-    #             6838,
-    #             7893,
-    #             8836,
-    #             9258,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         becky_good_peak_freqs = [7922, 7535, 8854]
-    #         becky_bad_peak_freqs = [6164, 6896, 8426, 9252, 9779]
-    #         re_picked_then_realized_unnecessary = [
-    #             6141,
-    #             8443,
-    #             7500,
-    #             9791,
-    #         ]
-    #     case "TAG6rearSOAEwf1.mat":  # 2
-    #         seth_good_peak_freqs = [
-    #             5626,
-    #             8096,
-    #             8484,
-    #             9868,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         becky_good_peak_freqs = [6029, 8102, 8489, 9857]
-    #         becky_bad_peak_freqs = [5626]
-    #         re_picked_then_realized_unnecessary = [6035]
-    #     case "TAG9rearSOAEwf2.mat":  # 3
-    #         seth_good_peak_freqs = [
-    #             4926,
-    #             6966,
-    #             7429,
-    #             9760,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         becky_good_peak_freqs = [6977]
-    #         becky_bad_peak_freqs = [3461, 4613, 4920, 6164, 7445, 9846, 10270]
-    #         re_picked_then_realized_unnecessary = [
-    #             6589,
-    #         ]
-    #     case "owl_TAG4learSOAEwf1.mat":  # 4
-    #         seth_good_peak_freqs = [
-    #             5766,
-    #             7181,
-    #             8834,
-    #             9636,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         becky_good_peak_freqs = [5771, 7176, 9631]
-    #         becky_bad_peak_freqs = [4958, 8463, 8839]
-    #         re_picked_then_realized_unnecessary = [4947, 8446]
-    #     # Tokays
-    #     case "tokay_GG1rearSOAEwf.mat":  # 0
-    #         seth_good_peak_freqs = [
-    #             1184,
-    #             1572,
-    #             3219,
-    #             3714,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         re_picked_then_realized_unnecessary = [1717]
-    #     case "tokay_GG2rearSOAEwf.mat":  # 1
-    #         seth_good_peak_freqs = [1200, 1567, 3182, 3876]
-    #         seth_bad_peak_freqs = []
-    #         re_picked_then_realized_unnecessary = [1324, 2896, 3435]
-    #     case "tokay_GG3rearSOAEwf.mat":  # 2
-    #         seth_good_peak_freqs = [
-    #             1109,
-    #             1620,
-    #             2272,
-    #             3144,
-    #         ]
-    #         seth_bad_peak_freqs = []
-    #         re_picked_then_realized_unnecessary = [
-    #             1330,
-    #             2821,
-    #         ]
-    #     case "tokay_GG4rearSOAEwf.mat":  # 3
-    #         seth_good_peak_freqs = [
-    #             1104,
-    #             2288,
-    #             2848,
-    #             3160,
-    #         ]
-    #         seth_bad_peak_freqs = []
-
-    # good_peak_freqs = seth_good_peak_freqs
-    # bad_peak_freqs = seth_bad_peak_freqs

@@ -44,9 +44,9 @@ colors = [
 ]
 
 # Global folders
-pkl_folder = os.path.join('paper_analysis', 'pickles', 'NDDHO')
+pkl_folder = os.path.join('otocoherence_paper', 'pickles', 'NDDHO')
 os.makedirs(pkl_folder, exist_ok=True)
-tau_pkl_folder = os.path.join('paper_analysis', 'pickles')
+tau_pkl_folder = os.path.join('otocoherence_paper', 'pickles')
 os.makedirs(tau_pkl_folder, exist_ok=True)
 
 "Plotting Parameters"
@@ -56,7 +56,7 @@ fontsize = 8
 output_spreadsheet = 1
 plot_scatter = 1
 
-"Start loop"
+"Generate and calculate autocoherence of NDDHO for various Q and f_d"
 for pw in pws:
     for rho, bw_type, hop_thing in rho_bw_hops:
         for A_const in A_consts:
@@ -238,7 +238,7 @@ for pw in pws:
                         fontsize=fontsize,
                     )
                     plt.tight_layout()
-                    results_folder = os.path.join('paper_analysis', 'results', 'nddho', f'NDDHO Results [{relevant_comp_str}]')
+                    results_folder = os.path.join('otocoherence_paper', 'results', 'nddho', f'NDDHO Results [{relevant_comp_str}]')
                     os.makedirs(results_folder, exist_ok=True)
                     plots_folder = os.path.join(results_folder, 'Fits Varying Q')
                     os.makedirs(plots_folder, exist_ok=True)
@@ -255,6 +255,7 @@ for pw in pws:
                 df_fitted_params.to_excel(spreadsheet_fn, index=False)
 
 
+"Make scatterplot of N_xi vs Q"
 if plot_scatter:
     # Plotting Params
     s=25
@@ -295,7 +296,7 @@ if plot_scatter:
                     bw_str = "BW=0.5gamma" if bw_type == 'gamma' else f"BW={bw_type}Hz"
                     relevant_comp_str = f"PW={pw}, {win_meth_str}, {bw_str}, A_const={A_const}"
 
-                    results_folder = os.path.join('paper_analysis', 'results', 'nddho', f'NDDHO Results [{relevant_comp_str}]')
+                    results_folder = os.path.join('otocoherence_paper', 'results', 'nddho', f'NDDHO Results [{relevant_comp_str}]')
                     os.makedirs(results_folder, exist_ok=True)
                     spreadsheet_fp = os.path.join(results_folder, f"NDDHO Q N_xi Data [{relevant_comp_str}].xlsx")
                     # print("ANALYSIS FROM ", spreadsheet_fp)
