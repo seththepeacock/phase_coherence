@@ -1,12 +1,14 @@
 {
 	"folders": [
-		{
-			"path": "."
-		},
-		{
-			"path": "../phaseco"
-            
-		}
-	],
+        {
+            "path": "."
+        },
+        {
+            "path": "../phaseco"
+        },
+        {
+            "path": "../otocoherence"
+        }
+    ],
     "settings": {}
 }
