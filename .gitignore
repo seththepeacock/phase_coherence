@@ -1,7 +1,12 @@
-data/
-!data
+# Ignore all contents of data
+data/*
+plots/*
+
+# Keep the folder itself
+!data/.gitkeep
+!plots/.gitkeep
+
+# Ignore Python caches and large file types
 **/__pycache__/
 *.npz
 *.mat
-plots/
-!plots
