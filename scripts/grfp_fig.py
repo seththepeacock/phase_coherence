@@ -1,13 +1,15 @@
+
+import sys, os
+sys.path.append(r"C:\Users\setht\Dropbox\Citadel\GitHub\otocoherence\scripts")
 from helper_funcs import *
-import os
 import matplotlib.pyplot as plt
 import phaseco as pc
 
 # Folders
-os.chdir(r"C:\Users\setht\Dropbox\Citadel\GitHub\phase-coherence")
-paper_figures_folder = os.path.join('non_paper_plots', 'grfp_figs')
-pkl_folder = os.path.join('paper_analysis', 'pickles', 'soae')
-tau_pkl_folder = os.path.join('paper_analysis', 'pickles')
+os.chdir(r"C:\Users\setht\Dropbox\Citadel\GitHub\otocoherence")
+paper_figures_folder = os.path.join('plots', 'grfp_figs')
+pkl_folder = os.path.join('pickles', 'soae')
+tau_pkl_folder = os.path.join('pickles')
 os.makedirs(paper_figures_folder, exist_ok=True)
 
 
@@ -52,7 +54,7 @@ xi_min_s = 0.0005
 xi_max_s = 0.1
 nfft = 2**14
 const_N_pd = 0
-show_plots = 1
+show_plots = 0
 
 
 
@@ -98,8 +100,8 @@ f = cgram_dict["f"]
 
 # MAKE PLOT
 plt.subplot(1, 3, 3)
-cbar = pc.plot_colossogram(xis_s, f, colossogram, cmap=cmap, return_cbar=True, vmax=vmax_2)
-plt.title("Dynamic", fontsize=fontsize)
+cbar = pc.plot_colossogram(cgram_dict, cmap=cmap, return_cbar=True, vmax=vmax_2)
+plt.title("(C) Dynamic", fontsize=fontsize)
 # Set Chris' requested fontsizes
 ax = plt.gca()
 
@@ -135,8 +137,8 @@ f = cgram_dict["f"]
 
 # MAKE PLOT
 plt.subplot(1, 3, 1)
-plt.title("50Hz Bandwidth", fontsize=fontsize)
-cbar = pc.plot_colossogram(xis_s, f, colossogram, cmap=cmap, return_cbar=True, vmax=vmax_1)
+plt.title("(A) 50Hz Bandwidth", fontsize=fontsize)
+cbar = pc.plot_colossogram(cgram_dict, cmap=cmap, return_cbar=True, vmax=vmax_1)
 # Set Chris' requested fontsizes
 ax = plt.gca()
 
@@ -172,8 +174,8 @@ f = cgram_dict["f"]
 
 # MAKE PLOT
 plt.subplot(1, 3, 2)
-plt.title("150Hz Bandwidth", fontsize=fontsize)
-cbar = pc.plot_colossogram(xis_s, f, colossogram, cmap=cmap, return_cbar=True, vmax=vmax_2)
+plt.title("(B) 150Hz Bandwidth", fontsize=fontsize)
+cbar = pc.plot_colossogram(cgram_dict, cmap=cmap, return_cbar=True, vmax=vmax_2)
 # Set Chris' requested fontsizes
 ax = plt.gca()
 
@@ -193,7 +195,8 @@ plt.xlim(xmin, xmax)
 
 plt.tight_layout()
 
-plt.savefig(os.path.join(paper_figures_folder, f"dyn win cgram fig.jpg"), dpi=500)
+os.chdir(r"C:\Users\setht\Dropbox\Citadel\GitHub\phase_coherence")
+plt.savefig(os.path.join(paper_figures_folder, f"dyn win cgram fig.jpg"), bbox_inches='tight', pad_inches=0, dpi=500)
 
 if show_plots:
     plt.show()

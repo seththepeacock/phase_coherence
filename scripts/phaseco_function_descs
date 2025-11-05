@@ -1,0 +1,162 @@
+# Key Functions
+
+## `get_welch()`
+
+Computes the **Welch estimate** of the power spectral density (PSD).
+
+```python
+f, spectrum = pc.get_welch(wf, fs, tau, nfft=None, hop=None, win="hann")
+```
+
+**Parameters**
+
+| Parameter | Type | Description |
+|------------|------|-------------|
+| `wf` | array | Input waveform. |
+| `fs` | int | Sampling rate in Hz. |
+| `tau` | int | Length (in samples) of each segment. |
+| `nfft` | int, optional | FFT length; applies zero-padding if `nfft > tau`. |
+| `hop` | int or float, optional | Hop size between segments. If <1, interpreted as fraction of `tau`. |
+| `N_segs` | int, optional, optional | Limits number of segments used. |
+| `win` | str or array, optional | Window type or custom array (passed to `scipy.signal.get_window`). |
+| `scaling` | str, optional | `'density'` (PSD), `'spectrum'` (PSD × bin width), `'magnitude'` (amplitude spectrum). |
+| `realfft` | bool, optional | If True, skips negative frequencies. |
+| `return_dict` | bool, optional | If True, returns dictionary with metadata and arrays. |
+
+**Returns**
+- `f`: Frequency bins (Hz)  
+- `spectrum`: Power spectral density (or spectrum)
+
+If `return_dict=True`, keys include `f`, `spectrum`, `segmented_spectrum`, `scaling`, `fs`, `tau`, `nfft`, `hop`, `N_segs`, and `win`.
+
+---
+
+## `get_autocoherence()`
+
+Computes the **phase autocoherence** between a signal and a time-advanced copy of itself.
+
+```python
+f, acoh = pc.get_autocoherence(wf, fs, xi, pw=True, tau=2**13, win_meth={"method":"rho"})
+```
+
+**Parameters**
+
+| Parameter | Type | Description |
+|------------|------|-------------|
+| `wf` | array | Input waveform. |
+| `fs` | int | Sampling rate. |
+| `xi` | int | Shift (in samples) for phase reference. |
+| `pw` | bool | If True, computes power-weighted coherence. |
+| `tau` | int | Window length (samples). |
+| `nfft` | int, optional | FFT size. |
+| `hop` | int, optional | Hop size between windows. |
+| `win_meth` | dict, optional | Windowing method (see **win_meth** section). |
+| `N_pd` | int, optional | Maximum number of phase differences to include. |
+| `ref_type` | str | `'time'`, `'freq'`, or `'freqs'` — type of phase reference. |
+| `freq_bin_hop` | int | Number of bins to offset for `'freq'` reference. |
+| `f0s` | array, optional | Specific frequencies to compute coherence for. |
+| `return_pd` | bool | If True, include phase-difference statistics in output. |
+| `return_dict` | bool | If True, returns full result dictionary. |
+
+**Returns**
+- Tuple `(f, autocoherence)` by default  
+- If `return_dict=True`, dictionary includes: `autocoherence`, `N_pd`, `f`, `stft`, `tau`, `nfft`, `hop`, `xi`, `fs`, and `pw`.
+
+---
+
+## `get_colossogram()`
+
+Computes a **colossogram**, i.e. autocoherence over a range of time lags (`xi`).
+
+```python
+cgram = pc.get_colossogram(wf, fs, xis, pw=True, tau=2**13, win_meth={"method":"rho"})
+```
+
+**Parameters**
+
+| Parameter | Type | Description |
+|------------|------|-------------|
+| `wf` | array | Input waveform. |
+| `fs` | int | Sampling rate. |
+| `xis` | array or dict | Array of lags, or dict with `xi_min_s`, `xi_max_s`, and `delta_xi_s`. |
+| `pw` | bool | Power-weighted coherence flag. |
+| `tau` | int | Window length in samples. |
+| `nfft` | int, optional | FFT size. |
+| `hop` | int or float, optional | Hop size (samples or fraction). |
+| `win_meth` | dict | Windowing method; see **win_meth** section. |
+| `const_N_pd` | bool | Hold N_pd fixed across all xi values. |
+| `global_xi_max_s` | float, optional | Sets a global xi upper limit (for multi-comparison). |
+| `N_bs` | int | Number of bootstrap repetitions for CI estimation. |
+| `f0s` | array or float, optional | Frequencies of interest. |
+| `nbacf` | bool | Use FFT convolution (faster for small f0s). |
+| `return_dict` | bool | Return full result dictionary if True. |
+
+**Returns**
+If `return_dict=False`: `(xis_s, f, colossogram)`  
+If `return_dict=True`: a dict with keys  
+`'xis_s'`, `'f'`, `'colossogram'`, `'tau'`, `'nfft'`, `'fs'`, `'N_pd_min'`, `'hop'`, `'win_meth'`, `'method_id'`, `'pw'`.
+
+---
+
+## `get_N_xi()`
+
+Estimates the **autocoherence decay timescale** from a colossogram slice, yielding a dimensionless coherence lifetime in cycles (`N_xi = f0 * T`).
+
+```python
+N_xi, fit_dict = pc.get_N_xi(cgram, f0, fit_func="exp")
+```
+
+**Parameters**
+
+| Parameter | Type | Description |
+|------------|------|-------------|
+| `cgram` | dict | Output from `get_colossogram()`. |
+| `f0` | float | Frequency bin to analyze. |
+| `decay_start_limit_xi_s` | float, optional | Max xi for initial peak search. |
+| `mse_thresh` | float | Fit until mean squared error < threshold. |
+| `fit_func` | str | `'exp'` (exponential) or `'gauss'` (Gaussian). |
+| `start_fit_frac` | float | Start fraction for fit region (default 0.9). |
+| `stop_fit` | str | `'frac'`, `'noise'`, or `None`. |
+| `stop_fit_frac` | float | Fractional cutoff for `'frac'` method. |
+| `noise_floor_bw_factor` | float | Defines noise floor as mean + std × factor. |
+| `sigma_power` | int | Exponent for weighting fit uncertainty. |
+| `start_peak_prominence` | float | Prominence threshold for decay onset detection. |
+| `A_const` | bool | Hold exponential amplitude A=1 if True. |
+| `A_max` | float | Maximum allowed exponential amplitude. |
+
+**Returns**
+- `N_xi`: Dimensionless coherence lifetime (# of cycles).  
+- `fit_dict`: Dictionary containing details of the fit, including fit residuals, noise metrics, and bootstraps.
+
+---
+
+
+## `win_meth` Parameter
+
+The `win_meth` dictionary defines **dynamic windowing strategies** used in several phaseco functions.
+
+**Structure**
+```python
+win_meth = {
+    "method": "rho",
+    "win_type": "flattop",
+    "rho": 1.0,
+}
+```
+
+**Keys**
+
+| Key | Type | Description |
+|------|------|-------------|
+| `method` | str | Windowing method: `'static'`, `'rho'`, or `'zeta'`. |
+| `win_type` | str or tuple | Window type (passed to `scipy.signal.get_window`). |
+| `rho` | float | FWHM multiplier for Gaussian window (used in `'rho'` method). |
+| `zeta` | float | Controls allowable spurious autocoherence in `'zeta'` method. |
+| `snapping_rhortle` | bool | When True and method='rho', switches to boxcar for large xi. |
+
+**Method Overview**
+- **`'static'`** — Fixed window defined by `win_type` only.  
+- **`'rho'`** — Dynamically adjusts the standard deviation of a Gaussian window so its full width half maximum is `rho * xi`.  
+- **`'zeta'`** — Dynamically shortens window to constrain power-weighted white noise coherence ≤ `zeta`.
+
+---
