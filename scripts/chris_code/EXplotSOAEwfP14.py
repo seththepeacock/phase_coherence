@@ -1,52 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-EXplotSOAEwfP13B.py
+EXplotSOAEwfP14.py
+
+[2025.09.30 --> salient update from v13B, given the degree of accumulated 
+ changes and updates]
 
 
 Purpose: (Python) Analysis of SOAE waveform data, including 
 consideration of phase info to extract several measures of phase coherence
 
-NOTE: (2025.06.13) Freezing this code "as is" to start making plots for revised 
-coherence MS (and will save archived vers. in ./Older/ folder); see
-.../Manuscripts (CB)/To write/2025 SOAE Phase Coherence/Figures/README.txt
---> Any updates just related to plots will be made to v13B
---> Any updates of substance will be made to a new v14. 
+
 
 # ==== Notes ==== [vers updates + addit. notes at bottom]
-o v.13B:
-    + added option to apply a simple window (e.g., Blackman) to corrWF2 as
-    per Talmadge et al 1993, but this does not appear useful at present;
-    would be good to crosscheck re effect/role of windowTau too
-    + added in fig9 to plot entire waveform (along w/ avg RMS) to get a quick
-    visual sense for any large artifacts
-    + added in "FIG.21" to help better determine SOAE peak freq. locs.
-    + added means to analyze .npz simulation waveforms (i.e., noise-driven
-    oscs. via EXnoiseDrivenOsc2.py)                                                    
-    + adding in new means to plot/compare the spectrally-averaged mags.
-    versus the power (i.e., mag. squared)
-    *** --> By and large, the two looks the same (shwew!). However, there can
-    be diffs. Sometimes it is subtle (e.g., tegu_TG1rearSOAEwf3 peak At ~1.86 kHz),
-    and drastic in others (e.g., )
-    +  tweaking main plot to add in higher-res mag plot and a noise floor
-    (done via a new code block specific to this main fig.)
-    + tweaking avgd. phase plot
-    +  tweaking plot xi-adjusted time averaging plot
-    + added in magTempFact (based upon a suggestion from Seth) to change 
-    how the mags are scaled heading into the inverse FT that is then
-    used for time averaging; prelim. observations suggest it seems to have 
-    an effect of accentuationg peaks when magTempFact=1.2 and likely worth 
-    future exploration....
-    --> ** preliminary observations suggest detecting sub-NF SOAE structure in:
-        > human_AP7RearwaveformSOAE   (see ripples from 4-6 kHz)
-        > magTempFact=1.2 
-        > Npts= 256*8    AND xiS= 256*2.1 
-                                  
-
-
-
-Fig.4 waveforms
-> human_TH14RearwaveformSOAE
+o v.14:
+    + 
+    
 
 Created on Mon May 16 10:59:20 2022 (v.112updated in 2025.03.25ff)
 @author: Cpumpkin (aka C. Bergevin)
@@ -66,9 +35,8 @@ lowess = sm.nonparametric.lowess
 
 # ====================================================
 # --- waveform (wf) file info
-root= 'paper_analysis/Data/'         # root path to file
-fileN = 'ACsb24rearSOAEwfA1.mat'
-#fileN= 'Other/testV11.wf1.npz'
+root= './Data/'         # root path to file
+fileN = 'anole_ACsb24rearSOAEwfA1.mat'
 #fileN = 'tegu_TG1rearSOAEwf3.txt'  # > Npts= 256*12 and xiS= 256*2.6
 #
 # +++++++++++++++++++++++++++++++++
@@ -104,7 +72,7 @@ windowTau= 0   # boolean: apply Hanning window to short time segments re Ctau an
 # --- Cxi-windowing
 windowXi= 1   # boolean: apply Gaussian window re Cxi {1}
 varXiWin= 1   # boolean: xi-variable std for Gaussian window re Cxi {1}
-rho= 0.7     # the xi Gaussian window std "rho" parameter {0.7}
+rho= 1.0     # the xi Gaussian window std "rho" parameter {0.7}
 winGstdVAL= 125  # window std if varXiWin=0 {125 samples?}
 xiWmax= 50000   # max. # of avgs. if using small xi {50000}
 # ---
@@ -186,7 +154,6 @@ M= int(np.floor(len(wf)/Npts))  # numb. of tau time segments (no overlap)
 xiS= int(xiS)  # convert xi shift {pts} to int (as may be needed)
 ###Mxi= int(np.floor(len(wf)/(xiS)-np.ceil(Npts/xiS)-5))  # max> numb. of xi-shifted tau time segments (w/ overlap)
 Mxi= int(np.floor(len(wf)/(np.abs(xiS))-np.ceil(Npts/np.abs(xiS))-5))
-Mxi= int((len(wf) - Npts) / np.abs(xiS)) + 1
 # ---
 if (Mxi>=xiWmax):  # limit # of avgs for xi-shifting
     Mxi= xiWmax
@@ -204,7 +171,8 @@ indxFl= np.where(freq>=fPlot[0]*1000)[0][0]  # find freq index re above (0.2) kH
 indxFh= np.where(freq<=fPlot[1]*1000)[0][-1]  # find freq index re under (7) kHz
 # --- dertermine Gaussin std for xi-windowing
 if (varXiWin==1):
-    winGstd= rho*xiS/(2*np.sqrt(2*np.log(2)))   # proprtional to xiS such that FWHM ~ xiS
+    #winGstd= rho*xiS/2*np.sqrt(2*np.log(2))   # proprtional to xiS such that FWHM ~ xiS
+    winGstd= rho*xiS/(2*np.sqrt(2*np.log(2)))
 else:
     winGstd= winGstdVAL  # fixed Cxi Gaussian window STD
 # --- send some vals to screen for ref
@@ -228,6 +196,8 @@ storePDomega= np.empty([int(Npts/2),M])  # phase diff re lower freq bin
 storeWFcorr= np.empty([int(Npts),M-1])  # phase-corrected wf
 storeT= np.empty([M-2])  # time array for tau-spectrograms
 storeTxi= np.empty([Mxi-1])  # time array for xi-spectrograms
+
+
 storeVStau= np.empty([int(Npts/2+1),M-2])  # time-delay coherence I (for tau-coherogram)
 storeVSxi= np.empty([int(Npts/2+1),Mxi-1])  # time-delay coherence II (for xi-coherogram)
 storeVSroong= np.empty([int(Npts/2+1),M-2],dtype=np.complex_)  # time-delay coherence (for coherogram)
@@ -354,6 +324,7 @@ specAVGmDBB= 20*np.log10(specAVGmB)
 # =======================================================================
 # ==== Loop II (OVERLAPPING): xi-shifting coherence 
 storePDxi= np.empty([int(Npts/2+1),Mxi])  # allocate buffer to store phase diffs
+storeMxi= np.empty([int(Npts/2+1),Mxi])  # allocate buffer to store mags
 storePxi= np.empty([int(Npts/2+1),Mxi])  # allocate buffer to store phases
 storeWFcorrXi= np.empty([int(Npts),Mxi-1])  # phase-corrected wf
 for n in range(0,Mxi):
@@ -422,6 +393,8 @@ for n in range(0,Mxi):
     storePxi[:,n-1]= phaseXi  # 
     storeVSxi[:,n-1]= vsIxi  # xi-shifted coherence (aka Gamma_xi) --> used in coherogram
     storeTxi[n-1]= tSxi  # time stamp of xi window onset
+    
+    storeMxi[:,n-1]= magNow
 #   
 # --- do the averaging of the phase to calculate the xi-based coherence
 xxXi= np.average(np.sin(storePDxi),axis=1)
@@ -440,7 +413,6 @@ phaseDtau = np.diff(phaseUWtau, axis=1) # **
 # --- also apply to the xi-shifted vers.
 phaseUWxi= np.unwrap(storePxi, axis=1)
 phaseDxi = np.diff(phaseUWxi, axis=1) 
-print(np.max(phaseDxi), np.min(phaseDxi))
 # --- now compute avgd vers
 storePDomegaAVG= np.average(np.abs(phaseDomega),axis=1)  # lastly avg. the abs val. over windows
 storePDtauAVG= np.average(np.abs(phaseDtau),axis=1)
@@ -523,25 +495,24 @@ if (1==0):
     fitNF= lowess(magNFfit,freqNFfit,frac=sigmaNF)
     # --> plot freqNFfit vs fitNF[:,1]
 
-if 0: # NOISE FLOOR
-    # === instead use a "SOAEsupp" file w/ probe coupled to a tube
-    fnameNF = os.path.join(root,fileNF)
-    dataNF = np.loadtxt(fnameNF)
-    # ==== 
-    freqNF = dataNF[:,0]
-    magNF = dataNF[:,1]
-    magNF= magNF+vertNFoff
+# === instead use a "SOAEsupp" file w/ probe coupled to a tube
+fnameNF = os.path.join(root,fileNF)
+dataNF = np.loadtxt(fnameNF)
+# ==== 
+freqNF = dataNF[:,0]
+magNF = dataNF[:,1]
+magNF= magNF+vertNFoff
 
-    # =======================================================================
-    # =======================================================================
-    # ==== visualize
-    plt.close("all")
-    # - create a title string contain. filename + key coherence params
-    #titC= fileN[:-4]+": "+r'$ \tau=$'+str(1000*Npts/SR)+" & "+r'$ \xi=$'+str(1000*xiS/SR)+" ms"
-    titC= fileN[:-4]+": "+r'$ \tau=$'+f'{1000*Npts/SR:.2f}'+" & "+r'$ \xi=$'+f'{1000*xiS/SR:.2f}'+" ms"
-    #titC= fileN[:-4]+": "+r'$ \tau=$'+{1000*Npts/SR}+" & "+r'$ \xi=$'+str(1000*xiS/SR)+" ms"
-    #print(f'Xi window shift = {1000*xiS/SR:.2f} ms (or {SR/xiS:.2f} Hz)')
+# =======================================================================
+# =======================================================================
+# ==== visualize
+plt.close("all")
+# - create a title string contain. filename + key coherence params
+#titC= fileN[:-4]+": "+r'$ \tau=$'+str(1000*Npts/SR)+" & "+r'$ \xi=$'+str(1000*xiS/SR)+" ms"
 titC= fileN[:-4]+": "+r'$ \tau=$'+f'{1000*Npts/SR:.2f}'+" & "+r'$ \xi=$'+f'{1000*xiS/SR:.2f}'+" ms"
+#titC= fileN[:-4]+": "+r'$ \tau=$'+{1000*Npts/SR}+" & "+r'$ \xi=$'+str(1000*xiS/SR)+" ms"
+#print(f'Xi window shift = {1000*xiS/SR:.2f} ms (or {SR/xiS:.2f} Hz)')
+
 # --- * FIG [v13B] - entire time waveform to see if there are lots of noisy excursions
 if figEntireWF==1:
     avgWGlong= np.sqrt(np.average([wf**2]))
@@ -576,7 +547,7 @@ if 1==0:
     fig1.tight_layout(pad=1.5)
 #
 # ==== *** FIG - coherence v.13B
-if 0:
+if 1==1:
     fig5, ax5  = plt.subplots(2,1)
     # -- **[v13B]
     if (1==1):  # {1==0}
@@ -587,7 +558,7 @@ if 0:
                    ms=7,color='k',label='Spectral Avg.')
     
     # -- include mic noise floor
-    if 0:  # {1==0}
+    if (1==1):  # {1==0}
         ax5[0].plot(freqNF/1000,magNF,linestyle='--',color='g',lw=micNF,
                     alpha=0.5,label='Est. Noise Floor')
     #
@@ -723,7 +694,7 @@ if 1==1:
 
 # ==== ** "FIG.21" [v13B] - time-avgd w/ phase corr spectral mags AND C_xi
 # --->
-if 0:
+if 1==1:
     fig21, ax21 = plt.subplots()
    
     sp1 = plt.plot(freq/1000,specAVGwfCorrXiDB+paOFF,marker=markC,linestyle='-',
@@ -819,10 +790,12 @@ if figCohero==1:
     tG,fG = np.meshgrid(storeT,freq/1000)  # tau-vers. vals
     tGxi,fGxi = np.meshgrid(storeTxi,freq/1000)  # xi-vers. vals
     spectrogV= 20*np.log10(storeM[:,2:])  # grab last M-1 spec. mags and convert to dB
+    spectrogVxi= 20*np.log10(storeMxi[:,1:])  # grab last M-1 spec. mags and convert to dB
     # ---
     fig6, (ax1, ax2) = plt.subplots(nrows=2)
     # --- spectrogram
-    cs= ax1.pcolor(tG,fG,spectrogV,cmap='jet')
+    #cs= ax1.pcolor(tG,fG,spectrogV,cmap='jet')
+    cs= ax1.pcolor(tGxi,fGxi,spectrogVxi,cmap='jet')
     cbar1= fig6.colorbar(cs,ax=ax1)
     cbar1.ax.set_ylabel('Magnitude [dB]')
     #cs.set_clim(-20,10)  # comment to let limits auto-set
@@ -845,8 +818,7 @@ if figCohero==1:
     plt.tight_layout()
 #
 # ==== ** FIG -  Avg. phase diffs: adjacent freq bin vs adjacent window
-#HERE
-if figPhase:
+if figPhase==1:
     fig7, ax7 = plt.subplots(2,1)
     ax7[0].plot(freqAVG/1000,storePDomegaAVG,linestyle='--',marker=markB, 
                    color='r',label=r'$\phi^{\omega}$')
@@ -861,8 +833,6 @@ if figPhase:
     ax7[0].grid()
     ax7[0].set_xlim(fPlot)
     fig7.delaxes(ax7[1])
-
-
 # # ==== ** FIG -  Avg. phase diffs: adjacent freq bin vs adjacent window
 # if figPhase==1:
 #     fig7, ax7 = plt.subplots()
@@ -878,7 +848,6 @@ if figPhase:
 #     fig2= plt.title(titC,fontsize=10,loc='right') 
 #     fig2= plt.grid()
 #     fig2= plt.xlim(fPlot)
-
 
 # === FIG (c/o Seth) - Avg. phase diff for C_omega vs C_omega vs mags (SI figure 1+2)
 if 1==0:
@@ -910,7 +879,7 @@ if 1==0:
         ax[i].set_xlim(fPlot)
         ax[i].set_ylim(0, np.pi)
     plt.tight_layout()
-plt.show()
+    plt.show()
 
 
     
@@ -947,6 +916,39 @@ o re tdPC Npts=512 seems to work for anoles (& owl?) and 2048 for humans
 
 ===================
 vers. Updates
+o v.13B:
+    + [2025.09.18] fixed an error in how winGstd was defined (missed extra
+     parentheses in denominator)                                                         
+    + added option to apply a simple window (e.g., Blackman) to corrWF2 as
+    per Talmadge et al 1993, but this does not appear useful at present;
+    would be good to crosscheck re effect/role of windowTau too
+    + added in fig9 to plot entire waveform (along w/ avg RMS) to get a quick
+    visual sense for any large artifacts
+    + added in "FIG.21" to help better determine SOAE peak freq. locs.
+    + added means to analyze .npz simulation waveforms (i.e., noise-driven
+    oscs. via EXnoiseDrivenOsc2.py)                                                    
+    + adding in new means to plot/compare the spectrally-averaged mags.
+    versus the power (i.e., mag. squared)
+    *** --> By and large, the two looks the same (shwew!). However, there can
+    be diffs. Sometimes it is subtle (e.g., tegu_TG1rearSOAEwf3 peak At ~1.86 kHz),
+    and drastic in others (e.g., )
+    +  tweaking main plot to add in higher-res mag plot and a noise floor
+    (done via a new code block specific to this main fig.)
+    + tweaking avgd. phase plot
+    +  tweaking plot xi-adjusted time averaging plot
+    + added in magTempFact (based upon a suggestion from Seth) to change 
+    how the mags are scaled heading into the inverse FT that is then
+    used for time averaging; prelim. observations suggest it seems to have 
+    an effect of accentuationg peaks when magTempFact=1.2 and likely worth 
+    future exploration....
+    --> ** preliminary observations suggest detecting sub-NF SOAE structure in:
+        > human_AP7RearwaveformSOAE   (see ripples from 4-6 kHz)
+        > magTempFact=1.2 
+        > Npts= 256*8    AND xiS= 256*2.1 
+                                  
+Fig.4 waveforms
+> human_TH14RearwaveformSOAE
+
 
 o v.13:
     +  tweaking how the phase-adjusted time-averaging is visualized   

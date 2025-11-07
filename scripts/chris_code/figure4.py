@@ -60,7 +60,7 @@ Created on Tue Jun 17 17:04:16 2025
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-import math
+import os
 import pandas as pd
 
 
@@ -70,8 +70,8 @@ binsN= 37    # number of bins for Nsoae histogram {27}
 N = 1000   # number of times to bootstrap re xi-adjusted power law fit {25?}
 ratioBinCNT= 200   # numb. of bins for freq. ratio histogram
 
-fName= '../Fig0X - N_xi and tuning comps/N_xi Fitted Parameters (rho=0.7, PW=True)E.xlsx'
-fact= 1/(4*np.pi);  # scaling factor for all Nxi {1/pi}
+fName= os.path.join('results', 'soae', 'SOAE Results (PW=False, BW=50Hz, rho=1.0, Flattop)', 'SOAE N_xi Fitted Parameters (PW=False, BW=50Hz, rho=1.0, Flattop).xlsx')
+fact= 1/(np.pi);  # scaling factor for all Nxi {1/pi}
 # ======================================================
 
 # -----------------------------
@@ -600,7 +600,7 @@ for n in range(0,N):
     indxBS= np.random.choice(indx,replace=1,size=nbs)
     xT= gmTall[indxBS] # 
     yT= nTall[indxBS] # 
-    pTtemp, covarTtemp = curve_fit(powlawFunc,xT,yT,maxfev=2000)
+    pTtemp, covarTtemp = curve_fit(powlawFunc,xT,yT,maxfev=10000)
     AfitTtemp, cfitTtemp = pTtemp
     fitTtemp= powlawFunc(fitF,AfitTtemp, cfitTtemp)
     # -- store away fits
