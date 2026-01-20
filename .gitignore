@@ -1,6 +1,6 @@
 # Ignore all contents of data
 data/*
-plots/*
+retired_plots/*
 
 # Keep the folder itself
 !data/.gitkeep

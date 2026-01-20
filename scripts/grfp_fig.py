@@ -29,12 +29,12 @@ wf, wf_fn, fs, good_peak_freqs, bad_peak_freqs = get_wf(
 xlabel = "Timescale [ms]"
 ylabel = "Frequency [kHz]"
 cmap = "magma"
-cbar_label = "Phase Self-Coherence"
+cbar_label = "Autocoherence"
 fontsize = 8
 fontsize_ticks = 5
 labelpad = 5
-ymax = 3.0
-ymin = 1.25
+ymax = 3.35
+ymin = 1.35
 xmin = 5
 xmax = 30
 vmax_1 = 1.0
@@ -48,7 +48,7 @@ hop_s = 0.01
 win_type = "flattop"
 rho = 0.7
 win_meth = {"method": "rho", "rho": rho, "win_type": win_type}
-pw = False
+mode = 'phi'
 bw = 50
 xi_min_s = 0.0005
 xi_max_s = 0.1
@@ -65,7 +65,7 @@ tau = get_precalc_tau_from_bw(bw, fs, win_type, tau_pkl_folder)
 lcc_kwargs_alt = {
     "wf_len_s": wf_len_s,
     "filter_meth": filter_meth,
-    "pw": pw,
+    "mode": mode,
     "xi_min_s": xi_min_s,
     "win_meth": win_meth,
     "nfft": nfft,
@@ -137,7 +137,7 @@ f = cgram_dict["f"]
 
 # MAKE PLOT
 plt.subplot(1, 3, 1)
-plt.title("(A) 50Hz Bandwidth", fontsize=fontsize)
+plt.title("(A) 50 Hz Bandwidth", fontsize=fontsize)
 cbar = pc.plot_colossogram(cgram_dict, cmap=cmap, return_cbar=True, vmax=vmax_1)
 # Set Chris' requested fontsizes
 ax = plt.gca()
@@ -174,7 +174,7 @@ f = cgram_dict["f"]
 
 # MAKE PLOT
 plt.subplot(1, 3, 2)
-plt.title("(B) 150Hz Bandwidth", fontsize=fontsize)
+plt.title("(B) 150 Hz Bandwidth", fontsize=fontsize)
 cbar = pc.plot_colossogram(cgram_dict, cmap=cmap, return_cbar=True, vmax=vmax_2)
 # Set Chris' requested fontsizes
 ax = plt.gca()

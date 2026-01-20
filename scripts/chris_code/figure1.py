@@ -36,7 +36,9 @@ lowess = sm.nonparametric.lowess
 # ====================================================
 # --- waveform (wf) file info
 root= 'data'         # root path to file
+# fileN = os.path.join('additional_humans', 'human_TH14RearwaveformSOAE.mat')
 fileN = 'ACsb24rearSOAEwfA1.mat'
+# fileN = ('Tokay_GG1rearSOAEwf.mat')
 #fileN = 'tegu_TG1rearSOAEwf3.txt'  # > Npts= 256*12 and xiS= 256*2.6
 #
 # +++++++++++++++++++++++++++++++++
@@ -44,22 +46,22 @@ fileN = 'ACsb24rearSOAEwfA1.mat'
 NptsB= 256*15    # *[v13B] create a hi-res avgd. mag spec for visualiz.
 vertOFF=17   # shift upwards vertically]
 
-magTempFact=2.0   # scaling factor for xi-adjust phase time-averaging {1}
+magTempFact=1.0   # scaling factor for xi-adjust phase time-averaging {1}
 # ** NOTE **: keep at 1 unless explicitly experimenting w/ its effect
 
 # --- mic noise floor files
-fileNF = 'testSOAEsupp1.txt'   # file name
+fileNF = os.path.join('noise_floors', 'testSOAEsupp1.txt')   # file name
 vertNFoff= -66  # dB offset for supp file re avgd mags {-65?}
 micNF= 0.5    # mic NF line thickness {1}
 # ----
-dBavgLims= [-110,-82]  #  dB lims for phase-adjusted time-averaging plot
-paOFF= 23  # dB to add to xi-adjust phase spec. avg mags plot
+dBavgLims= [-81,-52]  #  dB lims for phase-adjusted time-averaging plot
+paOFF= 21  # dB to add to xi-adjust phase spec. avg mags plot
 NFoffL= -13
 
 # +++++++++++++++++++++++++++++++++
 # ---
-Npts= 256*4    # tau = length of time window into FFT [in # of points] {256*4} (ideally be 2^N)
-xiS= 256*0.5        # xi = number of points to shift over in time to grab next buffer
+Npts= 256*12    # tau = length of time window into FFT [in # of points] {256*4} (ideally be 2^N)
+xiS= 256*2.6        # xi = number of points to shift over in time to grab next buffer
 SR= 44100         # sample rate used to meas. specified wf [Hz] {default = 44100 Hz}
 # ---- save computed coherence vals. to file?
 saveC= 0   # boolean to save comoputed vals.
@@ -72,7 +74,7 @@ windowTau= 0   # boolean: apply Hanning window to short time segments re Ctau an
 # --- Cxi-windowing
 windowXi= 1   # boolean: apply Gaussian window re Cxi {1}
 varXiWin= 1   # boolean: xi-variable std for Gaussian window re Cxi {1}
-rho= 1.0     # the xi Gaussian window std "rho" parameter {0.7}
+rho= 0.7*2*np.log(2)     # the xi Gaussian window std "rho" parameter {0.7}
 winGstdVAL= 125  # window std if varXiWin=0 {125 samples?}
 xiWmax= 50000   # max. # of avgs. if using small xi {50000}
 # ---
@@ -83,7 +85,7 @@ figPhase= 1 # boolean to show avgd. phases: 0-no, 1-yes {1}
 figCohero= 0   # boolean to show coherogram: 0-no, 1-yes {0}
 figEntireWF= 0 # boolean to show entire time WF: 0-no, 1-yes {0}
 # ---
-fPlot= [0.4,5]  # freq. limits for plotting [kHz] {[0.2,6], [2,12] for owl}
+fPlot= [0.4,7]  # freq. limits for plotting [kHz] {[0.2,6], [2,12] for owl}
 cPlot= [-0.05,1]
 magL=[-1,1]     # mag limits for plotting {[-5,5]}
 markB= 1  # boolean to turn off markers for plots (0=no markers) {1}
@@ -275,6 +277,8 @@ Comega= np.sqrt(xxNN**2 + yyNN**2)
 freqAVG= freq[1:]- 0.5*np.diff(freq)
 # --- calculate avgd. spectra
 specAVGm= np.average(storeM,axis=1)  # spectral-avgd MAGs
+
+
 specAVGmDB= 20*np.log10(specAVGm)    # "  " in dB
 specAVGp= np.average(storeP,axis=1)  # spectral-avgd PHASEs
 
@@ -636,10 +640,10 @@ if 1==0:
     
 # ==== * FIG [v13B] - spectral mags v.3: spectral-avgd vs time-avgd w/ phase corr
 # ---> Now focuses chiefly on C_xi "phase adjustment" rather than Ctau
-if 1==0:
+if 1==1:
     fig2, ax2 = plt.subplots()
     sp1 = plt.plot(freq/1000,specAVGmDB,linestyle='-',marker='none', 
-                   alpha=0.7,color='k',label='Spectral Avg.')
+                   alpha=0.7,color='k',label='Averaged Magnitudes')
    
     sp1 = plt.plot(freq/1000,specAVGwfCorrXiDB+paOFF,linestyle='-',
                 alpha=0.4,lw=2.2,color='r',label=r'Time Avg. via $\xi$-adjust.')
@@ -650,10 +654,14 @@ if 1==0:
     fig2= plt.ylabel('Magnitude [dB]',fontsize=12) 
     fig2= plt.title(titC,fontsize=8,loc='right',color=[0.5,0.5,0.5]) 
     fig2= plt.grid(True, which="both", ls="-", color='0.5')
-    fig2= plt.legend()
+    # fig2= plt.legend()
     fig2= plt.xlim(fPlot)
     fig2= plt.ylim(dBavgLims)
+    ax2.set_xscale('log')
     plt.tight_layout()
+    fig_fp = os.path.join("results", "paper_figures", "Fig4B OG.jpg")
+    plt.savefig(fig_fp, dpi=500)
+    plt.show()
 #
 r"""
 # ==== * FIG [v13B] - spectral mags v.2: spectral-avgd vs time-avgd w/ phase corr

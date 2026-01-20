@@ -35,8 +35,9 @@ lowess = sm.nonparametric.lowess
 
 # ====================================================
 # --- waveform (wf) file info
-root= './Data/'         # root path to file
-fileN = 'anole_ACsb24rearSOAEwfA1.mat'
+root= 'data'         # root path to file
+# fileN = 'anole_ACsb24rearSOAEwfA1.mat'
+fileN = 'ACsb24rearSOAEwfA1.mat'
 #fileN = 'tegu_TG1rearSOAEwf3.txt'  # > Npts= 256*12 and xiS= 256*2.6
 #
 # +++++++++++++++++++++++++++++++++
@@ -70,7 +71,7 @@ cutoffF= 0.15  #  cutoff freq. [kHz] {0.15}
 order = 6    # filter order {6?}
 windowTau= 0   # boolean: apply Hanning window to short time segments re Ctau and Comega {0}
 # --- Cxi-windowing
-windowXi= 1   # boolean: apply Gaussian window re Cxi {1}
+windowXi= 0  # boolean: apply Gaussian window re Cxi {1}
 varXiWin= 1   # boolean: xi-variable std for Gaussian window re Cxi {1}
 rho= 1.0     # the xi Gaussian window std "rho" parameter {0.7}
 winGstdVAL= 125  # window std if varXiWin=0 {125 samples?}
@@ -171,7 +172,7 @@ indxFl= np.where(freq>=fPlot[0]*1000)[0][0]  # find freq index re above (0.2) kH
 indxFh= np.where(freq<=fPlot[1]*1000)[0][-1]  # find freq index re under (7) kHz
 # --- dertermine Gaussin std for xi-windowing
 if (varXiWin==1):
-    #winGstd= rho*xiS/2*np.sqrt(2*np.log(2))   # proprtional to xiS such that FWHM ~ xiS
+    # winGstd= rho*xiS/2*np.sqrt(2*np.log(2))   # proprtional to xiS such that FWHM ~ xiS
     winGstd= rho*xiS/(2*np.sqrt(2*np.log(2)))
 else:
     winGstd= winGstdVAL  # fixed Cxi Gaussian window STD
@@ -417,7 +418,7 @@ phaseDxi = np.diff(phaseUWxi, axis=1)
 storePDomegaAVG= np.average(np.abs(phaseDomega),axis=1)  # lastly avg. the abs val. over windows
 storePDtauAVG= np.average(np.abs(phaseDtau),axis=1)
 storePDxiAVG= np.average(np.abs(phaseDxi),axis=1) # no further corr. needed (since handled earlier)
-#storePDxiAVGcorr= np.angle(np.exp(1j*(storePDxiAVG-(2*np.pi*freq*(xiS/SR)))))
+# storePDxiAVGcorr= np.angle(np.exp(1j*(storePDxiAVG-(2*np.pi*freq*(xiS/SR)))))
 # ==== handle time-averaging of various phase-adjusted waveforms
 # --- sans phase corr.
 timeAVGwf= np.average(storeWF,axis=1)  # time-averaged waveform
@@ -1045,3 +1046,4 @@ o v7:
 Other figures utilize
 > Model/coherenceD1summed.txt
 """
+plt.show()

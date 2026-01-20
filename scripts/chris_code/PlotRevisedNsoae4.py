@@ -60,7 +60,6 @@ Created on Tue Jun 17 17:04:16 2025
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-import math
 import pandas as pd
 
 
@@ -71,7 +70,7 @@ N = 1000   # number of times to bootstrap re xi-adjusted power law fit {25?}
 ratioBinCNT= 200   # numb. of bins for freq. ratio histogram
 
 fName= '../Fig0X - N_xi and tuning comps/N_xi Fitted Parameters (rho=0.7, PW=True)E.xlsx'
-fact= 1/(4*np.pi);  # scaling factor for all Nxi {1/pi}
+fact= 1/(4*np.pi);  # scaling factor for all Nxi {1/4pi}
 # ======================================================
 
 # -----------------------------
@@ -105,7 +104,7 @@ def computeNsoae(arr):
 
 Scnt= 0   # counter for # of subjects
 # =======================   =======================  =======================
-# subj.1 = human_TH14RearwaveformSOAE *
+# subj.1 = human_TH14RearwaveformSOAEshort *
 # [original 120 s waveform had several artifacts before 52.5 s mark, so
 # made shorter wf with suffix "short" of last 67.5 s]; still a few artifacts, 
 # but more minor] --> analysis of shorter wf (sans artifacts) revealed some
@@ -291,6 +290,7 @@ ratioT7= np.array(fT7[1:])/np.array(fT7[:-1])
 
 # Npts= 256*12
 # xiS= 256*2.6 AND magTempFact=1.0 
+
 # o using above, only specifying peaks w/ Cxi>0.21 and Cxi peak to localize freq.
 # --> This one is a bit tricky because there are numerous supra-thresh Cxi
 # vals for higher freqs above the (large) 6.55 kHz peak (e.g., at

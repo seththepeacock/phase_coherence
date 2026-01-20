@@ -26,7 +26,7 @@ for species in speciess:
         }  # cutoff freq (HPF if one value, BPF if two), transition band width, and max allowed ripple (in dB)
         wf_len_s = 60  # Will crop waveform to this length (in seconds)
         wf = crop_wf(wf, fs, wf_len_s)
-        wf = filter_wf(wf, fs, filter, species)
+        wf = filter_wf(wf, fs, filter)
 
         # Species parameters
         max_khzs = {
@@ -44,7 +44,7 @@ for species in speciess:
         
         # hop_s = 0.01
         # xi_s = 0.01
-        # tau_s = 2**13 / 44100  # Everyone uses the same tau_s
+        # tau=tau_s = 2**13 / 44100  # Everyone uses the same tau=tau_s
         tau_s = 0.02322
         xi_s = 0.00290
         hop_s = xi_s
@@ -55,20 +55,20 @@ for species in speciess:
         hop = round(hop_s * fs)
         xi = round(xi_s * fs)
 
-        pw = False
+        mode='phi'
 
         # GET AC
         ac_dict_xi = pc.get_autocoherence(
             wf,
             fs,
             xi,
-            pw,
-            tau,
+            mode='phi',
+            tau=tau,
             hop=hop,
             win_meth=win_meth,
             ref_type="next_seg",
-            return_avg_abs_pd=True,
-            phase_corr=False,
+            return_pd=True,
+            
             return_dict=True,
         )
         f_xi, avg_abs_pd_xi = ac_dict_xi["f"], ac_dict_xi["avg_abs_pd"]
@@ -77,13 +77,13 @@ for species in speciess:
             wf,
             fs,
             xi,
-            pw,
-            tau,
+            mode='phi',
+            tau=tau,
             hop=hop,
             win_meth=win_meth,
             ref_type="next_seg",
-            return_avg_abs_pd=True,
-            phase_corr=True,
+            return_pd=True,
+            
             return_dict=True,
         )
         f_xi_phase_corr, avg_abs_pd_xi_phase_corr = ac_dict_xi_phase_corr["f"], ac_dict_xi_phase_corr["avg_abs_pd"]
@@ -92,41 +92,41 @@ for species in speciess:
             wf,
             fs,
             xi=tau,
-            pw=pw,
+            mode='phi',
             tau=tau,
             hop=hop,
             win_meth=win_meth,
             ref_type="next_seg",
-            return_avg_abs_pd=True,
-            phase_corr=False,
+            return_pd=True,
+            
             return_dict=True,
         )
-        f_tau, avg_abs_pd_tau = ac_dict_tau["f"], ac_dict_tau["avg_abs_pd"]
+        f_tau, avg_abs_pd_tau = ac_dict_tau=tau["f"], ac_dict_tau=tau["avg_abs_pd"]
 
-        ac_dict_tau_phase_corr = pc.get_autocoherence(
+        ac_dict_tau=tau_phase_corr = pc.get_autocoherence(
             wf,
             fs,
             xi=tau,
-            pw=pw,
+            mode='phi',
             tau=tau,
             hop=hop,
             win_meth=win_meth,
             ref_type="next_seg",
-            return_avg_abs_pd=True,
-            phase_corr=True,
+            return_pd=True,
+            
             return_dict=True,
         )
-        f_tau_phase_corr, avg_abs_pd_tau_phase_corr = ac_dict_tau_phase_corr["f"], ac_dict_tau_phase_corr["avg_abs_pd"]
+        f_tau, avg_abs_pd_tau = ac_dict_tau=["f"], ac_dict_tau=tau_phase_corr["avg_abs_pd"]
 
         ac_dict_omega = pc.get_autocoherence(
             wf,
             fs,
             xi,
-            pw,
-            tau,
+            mode='phi',
+            tau=tau,
             hop=hop,
             ref_type="next_freq",
-            return_avg_abs_pd=True,
+            return_pd=True,
             return_dict=True,
         )
         f_omega, avg_abs_pd_omega = ac_dict_omega["f"], ac_dict_omega["avg_abs_pd"]
@@ -135,12 +135,12 @@ for species in speciess:
             wf,
             fs,
             xi,
-            pw,
-            tau,
+            mode='phi',
+            tau=tau,
             hop=hop,
             ref_type="next_freq",
-            return_avg_abs_pd=True,
-            phase_corr=True,
+            return_pd=True,
+            
             return_dict=True,
         )
         f_omega_phase_corr, avg_abs_pd_omega_phase_corr = ac_dict_omega_phase_corr["f"], ac_dict_omega_phase_corr["avg_abs_pd"]
@@ -185,15 +185,15 @@ for species in speciess:
         plt.ylabel(r"$\left < | \Delta \phi_\omega | \right >$")
 
         plt.subplot(3, 1, 3)
-        plt.title(r"$\tau$-Referenced Phases")
+        plt.title(r"$\tau=tau$-Referenced Phases")
         plt.scatter(
-            f_tau / 1000,
-            avg_abs_pd_tau,
+            f_tau=tau / 1000,
+            avg_abs_pd_tau=tau,
             label=rf"Uncorrected",
         )
         plt.scatter(
-            f_tau_phase_corr / 1000,
-            avg_abs_pd_tau_phase_corr,
+            f_tau=tau_phase_corr / 1000,
+            avg_abs_pd_tau=tau_phase_corr,
             label=rf"Phase Corrected",
         )
         plt.legend()
@@ -201,7 +201,7 @@ for species in speciess:
         plt.xlim(0.5, 5)
         plt.xlabel("Frequency [kHz]")
         plt.ylim(0, np.pi)
-        plt.ylabel(r"$\left < | \Delta \phi_\tau | \right >$")
+        plt.ylabel(r"$\left < | \Delta \phi_\tau=tau | \right >$")
 
 plt.tight_layout()
 plt.savefig("avg_abs_pd_plot.png")
